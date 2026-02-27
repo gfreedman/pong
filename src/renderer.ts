@@ -14,40 +14,131 @@ import {
   HIT_EYE_FLASH_MS, BALL_SAD_MS,
   PADDLE_COLOR_FLASH_MS,
   GOAL_FLASH_MS, GOAL_PARTICLE_MS,
+  MATCH_TARGET,
+  RALLY_TIER_BUILDING, RALLY_TIER_INTENSE, RALLY_TIER_DRAMATIC, RALLY_TIER_LEGENDARY,
+  ZOOM_INTENSE, ZOOM_DRAMATIC, ZOOM_LEGENDARY,
 } from './constants.js';
+
+/** How many trail points to display at a given rally count (trail grows with intensity). */
+function trailDisplayCount(rallyCount: number): number {
+  if (rallyCount >= RALLY_TIER_LEGENDARY) return 22;
+  if (rallyCount >= RALLY_TIER_DRAMATIC)  return 18;
+  if (rallyCount >= RALLY_TIER_INTENSE)   return 14;
+  if (rallyCount >= RALLY_TIER_BUILDING)  return 12;
+  return 10;
+}
+
+/** Canvas zoom factor (0 = none) at a given rally count. */
+function rallyZoom(rallyCount: number): number {
+  if (rallyCount >= RALLY_TIER_LEGENDARY) return ZOOM_LEGENDARY;
+  if (rallyCount >= RALLY_TIER_DRAMATIC)  return ZOOM_DRAMATIC;
+  if (rallyCount >= RALLY_TIER_INTENSE)   return ZOOM_INTENSE;
+  return 0;
+}
+
+/** Escalating emoji label for the rally counter. Returns '' when too low to show. */
+function getRallyLabel(count: number): string {
+  if (count < 4)   return '';
+  if (count >= 25) return `🌟 ${count} 🌟`;
+  if (count >= 20) return `💥 ${count} 💥`;
+  if (count >= 15) return `⚡ ${count} ⚡`;
+  if (count >= 10) return `🔥 ${count} 🔥`;
+  if (count >=  7) return `🏓 ${count} 🏓`;
+  return              `🏓 ${count}`;
+}
 
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
 
   constructor(canvas: HTMLCanvasElement) {
+    // Scale the canvas buffer to physical pixels so text/glow are sharp on
+    // retina / high-DPI displays. All drawing code still uses 960×540 logical px.
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width  = CANVAS_WIDTH  * dpr;
+    canvas.height = CANVAS_HEIGHT * dpr;
+
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Could not get 2D context');
     this.ctx = ctx;
+
+    // Apply the DPR scale as the base transform. Because ctx.save()/restore()
+    // is a stack, all nested pairs restore back to this scale — never to identity.
+    ctx.scale(dpr, dpr);
   }
 
   // ─── Top-level draw ─────────────────────────────────────────────────────
 
   draw(state: GameState, shakeX: number, shakeY: number): void {
     const { ctx } = this;
+    const rc = state.rallyCount;
 
+    // ── Rally zoom — subtle "TV camera push-in" centered on canvas ───────
+    const zoom = rallyZoom(rc);
+    ctx.save(); // zoom context
+    if (zoom > 0) {
+      ctx.translate(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+      ctx.scale(1 + zoom, 1 + zoom);
+      ctx.translate(-CANVAS_WIDTH / 2, -CANVAS_HEIGHT / 2);
+    }
+
+    // ── Shake ─────────────────────────────────────────────────────────────
     ctx.save();
     ctx.translate(shakeX, shakeY);
 
-    this.drawBackground();
+    // Background — warms slightly toward red at Dramatic+ (subliminal tension)
+    const warmth = rc >= RALLY_TIER_DRAMATIC ? Math.min((rc - RALLY_TIER_DRAMATIC) / 12, 1) : 0;
+    this.drawBackground(warmth);
     this.drawWallMarks(state.wallMarks);
-    this.drawCourt();
+
+    // Court lines brighten with rally intensity
+    const courtIntensity = 1 + Math.min(rc / RALLY_TIER_LEGENDARY, 1) * 1.8;
+    this.drawCourt(courtIntensity);
+
     this.drawGoalParticles(state.goalParticles);
-    this.drawBallTrail(state.ball);
-    this.drawBall(state.ball);
+    this.drawBallTrail(state.ball, rc);
+
+    // Ball — materialize fade-in during exhale, gentle pulse while serving
+    const isMaterialize = state.materializeAlpha < 0.99;
+    const isPulsing = state.phase === 'SERVE_PENDING' || state.phase === 'SERVING';
+    if (isMaterialize || isPulsing) {
+      ctx.save();
+      if (isMaterialize) ctx.globalAlpha = state.materializeAlpha;
+      if (isPulsing) {
+        const pulse = 1 + Math.sin(Date.now() * 0.006) * 0.07;
+        // Temporarily scale ball radius for the pulse (render-only, restored below)
+        const orig = state.ball.radius;
+        state.ball.radius = orig * pulse;
+        this.drawBall(state.ball);
+        state.ball.radius = orig;
+      } else {
+        this.drawBall(state.ball);
+      }
+      ctx.restore();
+    } else {
+      this.drawBall(state.ball);
+    }
+
     this.drawPaddle(state.player1);
     this.drawPaddle(state.player2);
     this.drawImpactRings(state.impactRings);
     this.drawGoalFlashes(state.goalFlashes);
 
-    ctx.restore();
+    // Speed lines — appear at Dramatic tier, intensify toward Legendary
+    if (rc >= RALLY_TIER_DRAMATIC) {
+      this.drawSpeedLines(state.ball, rc);
+    }
 
-    // HUD drawn outside shake so it stays stable
+    ctx.restore(); // shake
+
+    // HUD drawn outside shake so it stays stable (still inside zoom)
     this.drawHUD(state);
+
+    ctx.restore(); // zoom
+
+    // Screen-edge pulse at Legendary — drawn outside zoom so it hits true edges
+    if (rc >= RALLY_TIER_LEGENDARY) {
+      this.drawEdgePulse(rc);
+    }
   }
 
   drawToyMode(state: GameState, shakeX: number, shakeY: number): void {
@@ -71,19 +162,34 @@ export class Renderer {
 
   // ─── Background ─────────────────────────────────────────────────────────
 
-  private drawBackground(): void {
+  /**
+   * @param warmth  0–1 — shifts background very slightly warmer at high rally
+   *                (#0a0a2e → #0f0a2e). Subliminal tension, barely perceptible.
+   */
+  private drawBackground(warmth = 0): void {
     const { ctx } = this;
-    ctx.fillStyle = COLOR_BG;
+    // Base: r=10 g=10 b=46. At full warmth: r=15 — just enough to feel "hot"
+    const r = Math.round(10 + warmth * 5);
+    ctx.fillStyle = `rgb(${r},10,46)`;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
   }
 
   // ─── Court ──────────────────────────────────────────────────────────────
 
-  private drawCourt(): void {
+  /**
+   * @param intensity  1 = normal; higher values brighten the court lines to
+   *                   build visible tension during long rallies.
+   */
+  private drawCourt(intensity = 1): void {
     const { ctx } = this;
+    const alpha = Math.min(0.18 * intensity, 0.55);
+    const style = `rgba(0,240,255,${alpha.toFixed(3)})`;
+
     // Dashed center line
     ctx.save();
-    ctx.strokeStyle = COLOR_COURT;
+    ctx.strokeStyle = style;
+    ctx.shadowColor = COLOR_P1;
+    ctx.shadowBlur = intensity > 1.5 ? (intensity - 1) * 16 : 0;
     ctx.lineWidth = 2;
     ctx.setLineDash([12, 14]);
     ctx.beginPath();
@@ -95,7 +201,9 @@ export class Renderer {
 
     // Center circle
     ctx.save();
-    ctx.strokeStyle = COLOR_COURT;
+    ctx.strokeStyle = style;
+    ctx.shadowColor = COLOR_P1;
+    ctx.shadowBlur = intensity > 1.5 ? (intensity - 1) * 10 : 0;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.arc(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, 60, 0, Math.PI * 2);
@@ -138,22 +246,29 @@ export class Renderer {
 
   // ─── Ball Trail ─────────────────────────────────────────────────────────
 
-  private drawBallTrail(ball: Ball): void {
+  private drawBallTrail(ball: Ball, rallyCount = 0): void {
     const { ctx } = this;
-    const len = ball.trail.length;
-    if (len === 0) return;
+    const displayLen = Math.min(ball.trail.length, trailDisplayCount(rallyCount));
+    if (displayLen === 0) return;
 
-    for (let i = 0; i < len; i++) {
+    // At high rallies the trail gets brighter and more saturated
+    const intensity = rallyCount >= RALLY_TIER_LEGENDARY ? 1
+      : rallyCount >= RALLY_TIER_DRAMATIC  ? 0.75
+      : rallyCount >= RALLY_TIER_INTENSE   ? 0.5
+      : 0;
+    const baseAlpha = 0.55 + intensity * 0.25;
+
+    for (let i = 0; i < displayLen; i++) {
       const pt = ball.trail[i];
-      const age = (i + 1) / (TRAIL_LENGTH + 1); // 0 = newest, 1 = oldest
-      const alpha = (1 - age) * 0.55;
+      const age = (i + 1) / (displayLen + 1); // 0 = newest, 1 = oldest
+      const alpha = (1 - age) * baseAlpha;
       const radius = ball.radius * (1 - age * 0.6);
 
       ctx.save();
       ctx.globalAlpha = alpha;
       ctx.fillStyle = COLOR_P1;
       ctx.shadowColor = COLOR_P1;
-      ctx.shadowBlur = 8 * (1 - age);
+      ctx.shadowBlur = (8 + intensity * 8) * (1 - age);
       ctx.beginPath();
       ctx.arc(pt.x, pt.y, radius, 0, Math.PI * 2);
       ctx.fill();
@@ -462,6 +577,56 @@ export class Renderer {
     return `rgb(${r},${g},${b})`;
   }
 
+  // ─── Speed Lines (Dramatic+) ─────────────────────────────────────────────
+
+  /** Thin lines trailing behind the ball in the direction opposite to travel. */
+  private drawSpeedLines(ball: Ball, rallyCount: number): void {
+    const { ctx } = this;
+    const t = Math.min((rallyCount - RALLY_TIER_DRAMATIC) / 12, 1);
+    const numLines = 4 + Math.round(t * 3);
+    const spread = 0.45;
+    const backAngle = Math.atan2(ball.vy, ball.vx) + Math.PI;
+
+    ctx.save();
+    ctx.globalAlpha = 0.28 + t * 0.28;
+    ctx.strokeStyle = COLOR_P1;
+    ctx.lineWidth = 0.8;
+    ctx.shadowColor = COLOR_P1;
+    ctx.shadowBlur = 4;
+
+    for (let i = 0; i < numLines; i++) {
+      // Use spinAngle for smooth deterministic variation (no per-frame random flicker)
+      const lineAngle = backAngle + (i / (numLines - 1) - 0.5) * spread;
+      const length = 18 + t * 28 + Math.sin(ball.spinAngle + i * 1.3) * 6;
+      ctx.beginPath();
+      ctx.moveTo(ball.x, ball.y);
+      ctx.lineTo(
+        ball.x + Math.cos(lineAngle) * length,
+        ball.y + Math.sin(lineAngle) * length
+      );
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ─── Screen Edge Pulse (Legendary) ───────────────────────────────────────
+
+  /** Breathing glow around the screen edges — the court is alive at 20+ hits. */
+  private drawEdgePulse(rallyCount: number): void {
+    const { ctx } = this;
+    const t = Math.min((rallyCount - RALLY_TIER_LEGENDARY) / 15, 1);
+    const pulse = (Math.sin(Date.now() * 0.004) + 1) / 2; // 0–1 at ~2Hz
+
+    ctx.save();
+    ctx.strokeStyle = COLOR_P1;
+    ctx.lineWidth = 5 + pulse * 5;
+    ctx.globalAlpha = (0.12 + t * 0.18) * (0.4 + pulse * 0.6);
+    ctx.shadowColor = COLOR_P1;
+    ctx.shadowBlur = 20 + pulse * 20;
+    ctx.strokeRect(1, 1, CANVAS_WIDTH - 2, CANVAS_HEIGHT - 2);
+    ctx.restore();
+  }
+
   // ─── Impact Rings ───────────────────────────────────────────────────────
 
   private drawImpactRings(rings: ImpactRing[]): void {
@@ -488,32 +653,85 @@ export class Renderer {
 
   private drawHUD(state: GameState): void {
     const { ctx } = this;
-    ctx.save();
-    ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'center';
+    const cx = CANVAS_WIDTH / 2;
+    const p1x = cx - 70;
+    const p2x = cx + 70;
 
-    // Scores
-    ctx.font = 'bold 52px "Courier New", monospace';
-    ctx.shadowColor = COLOR_P1;
-    ctx.shadowBlur = 12;
-    ctx.fillStyle = COLOR_P1;
-    ctx.fillText(String(state.score1), CANVAS_WIDTH / 2 - 70, 64);
+    // Score numbers with pop scale animation
+    const drawScore = (score: number, pop: number, x: number, y: number, color: string) => {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(pop, pop);
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 56px system-ui, -apple-system, Arial, sans-serif';
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 16 + (pop - 1) * 40; // extra glow during pop
+      ctx.fillStyle = color;
+      ctx.fillText(String(score), 0, 0);
+      ctx.restore();
+    };
+    drawScore(state.score1, state.score1Pop, p1x, 64, COLOR_P1);
+    drawScore(state.score2, state.score2Pop, p2x, 64, COLOR_P2);
 
-    ctx.shadowColor = COLOR_P2;
-    ctx.shadowBlur = 12;
-    ctx.fillStyle = COLOR_P2;
-    ctx.fillText(String(state.score2), CANVAS_WIDTH / 2 + 70, 64);
+    // Match-target pip dots
+    this.drawMatchPips(p1x, state.score1, COLOR_P1);
+    this.drawMatchPips(p2x, state.score2, COLOR_P2);
 
-    // Rally counter (subtle, bottom center)
-    if (state.rallyCount > 3) {
-      ctx.shadowColor = 'rgba(255,255,255,0.5)';
-      ctx.shadowBlur = 4;
-      ctx.fillStyle = 'rgba(255,255,255,0.45)';
-      ctx.font = '14px "Courier New", monospace';
-      ctx.fillText(`RALLY  ${state.rallyCount}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT - 16);
+    // Bottom center: rally counter OR serve hint depending on phase
+    if (state.phase === 'SERVE_PENDING') {
+      const pulse = (Math.sin(Date.now() * 0.004) + 1) / 2;
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.font = '14px system-ui, sans-serif';
+      ctx.globalAlpha = 0.3 + pulse * 0.45;
+      ctx.fillStyle = '#aaaaff';
+      ctx.fillText('W / S  ·  ready to serve', cx, CANVAS_HEIGHT - 14);
+      ctx.restore();
+    } else {
+      const label = getRallyLabel(state.rallyCount);
+      if (label) {
+        const heat = Math.min((state.rallyCount - 4) / 21, 1);
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.font = `${Math.round(14 + heat * 6)}px system-ui, 'Apple Color Emoji', sans-serif`;
+        ctx.shadowColor = `rgba(255, 160, 0, ${0.5 + heat * 0.5})`;
+        ctx.shadowBlur = 4 + heat * 18;
+        const g = Math.round(255 - heat * 105);
+        const b = Math.round(255 - heat * 255);
+        ctx.fillStyle = `rgba(255, ${g}, ${Math.max(0, b)}, ${0.6 + heat * 0.35})`;
+        ctx.fillText(label, cx, CANVAS_HEIGHT - 14);
+        ctx.restore();
+      }
     }
+  }
 
-    ctx.restore();
+  /** Draw MATCH_TARGET pip dots under a score, filled up to `scored`. */
+  private drawMatchPips(centerX: number, scored: number, color: string): void {
+    const { ctx } = this;
+    const r   = 3.5;  // dot radius px
+    const gap = 11;   // center-to-center spacing px
+    const startX = centerX - ((MATCH_TARGET - 1) * gap) / 2;
+    const y = 82;
+
+    for (let i = 0; i < MATCH_TARGET; i++) {
+      const x = startX + i * gap;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      if (i < scored) {
+        ctx.fillStyle = color;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 6;
+        ctx.globalAlpha = 0.9;
+        ctx.fill();
+      } else {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = 0.22;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
   }
 
   // ─── Menu screen ────────────────────────────────────────────────────────

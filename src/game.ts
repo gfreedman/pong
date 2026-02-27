@@ -1,6 +1,6 @@
 // Game — state machine, game loop, orchestration
 
-import { Ball, Paddle, GameState, GamePhase, ImpactRing, WallMark, ScreenShake, GoalFlash, GoalParticle } from './types.js';
+import { Ball, Paddle, GameState, ImpactRing, WallMark, ScreenShake, GoalFlash, GoalParticle } from './types.js';
 import {
   CANVAS_WIDTH, CANVAS_HEIGHT,
   BALL_RADIUS, BALL_BASE_SPEED,
@@ -11,10 +11,17 @@ import {
   SHAKE_GOAL_INTENSITY, SHAKE_GOAL_MS,
   BALL_SAD_MS,
   SERVE_COUNTDOWN_MS,
+  MATCH_TARGET, SPARKS_PER_POINT, SPARKS_MATCH_WIN,
+  RALLY_TIER_BUILDING, RALLY_TIER_INTENSE, RALLY_TIER_DRAMATIC, RALLY_TIER_LEGENDARY,
+  EXHALE_BASE_MS, EXHALE_PER_RALLY_HIT, EXHALE_EXTRA_CAP_MS,
+  BALL_MATERIALIZE_MS,
+  SERVE_PENDING_AI_MS,
+  LEGENDARY_SHAKE_INTENSITY, LEGENDARY_SHAKE_MS,
 } from './constants.js';
 import { InputManager } from './input.js';
 import { AudioManager } from './audio.js';
 import { Renderer } from './renderer.js';
+import { AIController } from './ai.js';
 import {
   updateBall, updatePaddleAnimations, resetBall,
   spawnImpactRing, updateImpactRings,
@@ -29,7 +36,7 @@ function makeBall(): Ball {
   return {
     x: CANVAS_WIDTH / 2,
     y: CANVAS_HEIGHT / 2,
-    vx: BALL_BASE_SPEED,
+    vx: 0,
     vy: 0,
     spin: 0,
     spinAngle: 0,
@@ -56,7 +63,7 @@ function makePaddle(side: 1 | 2): Paddle {
     height: PADDLE_HEIGHT,
     vy: 0, prevY: (CANVAS_HEIGHT - PADDLE_HEIGHT) / 2,
     recoilOffset: 0, recoilVelocity: 0,
-    breathPhase: side === 2 ? Math.PI : 0, // offset so they don't breathe in sync
+    breathPhase: side === 2 ? Math.PI : 0,
     chromaticTimer: 0,
     colorFlashTimer: 0,
     emotionOffset: 0, emotionVelocity: 0,
@@ -73,29 +80,40 @@ export class Game {
   private input: InputManager;
   private audio: AudioManager;
   private renderer: Renderer;
+  private ai: AIController;
 
   private lastTimestamp = 0;
   private rafId = 0;
 
-  // Toy mode: phase 1, ball reflects off right wall
-  private toyMode = true;
-
   // Spin discovery tracking
   private rallyHits = 0;
   private spinDiscoveryShown = false;
-  private spinDiscoveryTimer = 0; // ms remaining to display label
+  private spinDiscoveryTimer = 0;
 
-  // Countdown state
+  // Phase timers
+  private phaseTimer = 0;       // POINT_SCORED exhale countdown (ms, counts down)
+  private servePendingTimer = 0; // SERVE_PENDING elapsed (ms, counts up)
   private countdownTimer = 0;
   private countdownStep = 3;
+
+  // End screen
+  private endScreenIndex = 1;
+  private sparksEarned = 0;
+
+  // Serve direction: true = toward left (P1 receives), false = toward right (P2)
+  private servingToward = true;
+
+  // Rally drone tier management
+  private currentDroneTier = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.input = new InputManager();
     this.audio = new AudioManager();
     this.renderer = new Renderer(canvas);
+    this.ai = new AIController();
 
     this.state = {
-      phase: 'PLAYING',
+      phase: 'POINT_SCORED',
       ball: makeBall(),
       player1: makePaddle(1),
       player2: makePaddle(2),
@@ -109,19 +127,14 @@ export class Game {
       rallyCount: 0,
       longestRally: 0,
       isFirstLaunch: true,
+      materializeAlpha: 0,
+      score1Pop: 1,
+      score2Pop: 1,
     };
 
-    // Launch ball toward player for first launch experience
-    this.launchToyBall();
-  }
-
-  private launchToyBall(): void {
-    resetBall(this.state.ball, false); // launch rightward (toward right wall) initially
-    // Gentle initial speed for toy mode
-    this.state.ball.speed = BALL_BASE_SPEED * 0.85;
-    const speed = this.state.ball.speed;
-    this.state.ball.vx = speed * 0.9;
-    this.state.ball.vy = speed * (Math.random() > 0.5 ? 0.2 : -0.2);
+    // First serve uses the full breath ritual
+    this.phaseTimer = EXHALE_BASE_MS;
+    this.servingToward = true;
   }
 
   start(): void {
@@ -136,7 +149,7 @@ export class Game {
   // ─── Main Loop ─────────────────────────────────────────────────────────
 
   private loop(timestamp: number): void {
-    const deltaMs = Math.min(timestamp - this.lastTimestamp, 80); // cap at 80ms
+    const deltaMs = Math.min(timestamp - this.lastTimestamp, 80);
     this.lastTimestamp = timestamp;
 
     this.update(deltaMs);
@@ -146,18 +159,46 @@ export class Game {
     this.rafId = requestAnimationFrame(this.loop.bind(this));
   }
 
-  // ─── Update ────────────────────────────────────────────────────────────
+  // ─── Update dispatch ────────────────────────────────────────────────────
 
   private update(deltaMs: number): void {
     const { state } = this;
 
-    this.handleInput(deltaMs);
-    this.updatePaddleMovement(deltaMs);
-    this.updateAnimations(deltaMs);
+    switch (state.phase) {
+      case 'PLAYING':
+        this.updatePaddleMovement(deltaMs);
+        this.ai.update(state.player2, state.ball, deltaMs);
+        this.updateAnimations(deltaMs);
+        this.updatePhysics(deltaMs);
+        break;
 
-    if (state.phase === 'PLAYING') {
-      this.updatePhysics(deltaMs);
+      case 'POINT_SCORED':
+        this.updateAnimations(deltaMs);
+        this.slidePaddlesToCenter(deltaMs);
+        this.tickPointScored(deltaMs);
+        break;
+
+      case 'SERVE_PENDING':
+        this.updatePaddleMovement(deltaMs);
+        this.ai.update(state.player2, state.ball, deltaMs);
+        this.updateAnimations(deltaMs);
+        this.tickServePending(deltaMs);
+        break;
+
+      case 'SERVING':
+        this.updatePaddleMovement(deltaMs);
+        this.ai.update(state.player2, state.ball, deltaMs);
+        this.updateAnimations(deltaMs);
+        this.tickServing(deltaMs);
+        break;
+
+      case 'MATCH_END':
+        this.tickMatchEnd();
+        break;
     }
+
+    // Score pop easing — every frame regardless of phase
+    this.tickScorePops(deltaMs);
 
     updateImpactRings(state.impactRings, deltaMs);
     updateWallMarks(state.wallMarks, deltaMs);
@@ -166,28 +207,128 @@ export class Game {
     updateScreenShake(state.shake, deltaMs);
     this.audio.tick(deltaMs);
 
-    // Spin discovery timer
     if (this.spinDiscoveryTimer > 0) {
       this.spinDiscoveryTimer = Math.max(0, this.spinDiscoveryTimer - deltaMs);
     }
   }
 
-  private handleInput(_deltaMs: number): void {
-    if (this.input.pause()) {
-      // Phase 1: just for future expansion
+  // ─── Phase tick handlers ────────────────────────────────────────────────
+
+  /**
+   * POINT_SCORED — the exhale phase.
+   * Paddles slide to center, ball materialises, then hands off to SERVE_PENDING.
+   */
+  private tickPointScored(deltaMs: number): void {
+    // Animate ball fade-in from transparent → visible over BALL_MATERIALIZE_MS
+    this.state.materializeAlpha = Math.min(
+      1,
+      this.state.materializeAlpha + deltaMs / BALL_MATERIALIZE_MS
+    );
+
+    this.phaseTimer -= deltaMs;
+    if (this.phaseTimer <= 0) {
+      this.state.phase = 'SERVE_PENDING';
+      this.servePendingTimer = 0;
     }
   }
+
+  /**
+   * SERVE_PENDING — player signals ready by pressing a movement key.
+   * AI auto-readies after SERVE_PENDING_AI_MS.
+   */
+  private tickServePending(deltaMs: number): void {
+    this.servePendingTimer += deltaMs;
+
+    const playerReady = this.input.p1Up() || this.input.p1Down();
+    const aiReady = this.servePendingTimer >= SERVE_PENDING_AI_MS;
+
+    if (playerReady || aiReady) {
+      this.state.phase = 'SERVING';
+      this.countdownStep = 3;
+      this.countdownTimer = SERVE_COUNTDOWN_MS;
+      this.audio.playCountdownBeep(0); // "3" — low beep
+    }
+  }
+
+  private tickServing(deltaMs: number): void {
+    this.countdownTimer -= deltaMs;
+    if (this.countdownTimer <= 0) {
+      this.countdownStep--;
+      if (this.countdownStep > 0) {
+        this.countdownTimer = SERVE_COUNTDOWN_MS;
+        this.audio.playCountdownBeep(this.countdownStep === 1 ? 2 : 1);
+      } else {
+        resetBall(this.state.ball, this.servingToward);
+        this.state.phase = 'PLAYING';
+      }
+    }
+  }
+
+  private tickMatchEnd(): void {
+    const OPTIONS = 3;
+    if (this.input.menuUp()) {
+      this.endScreenIndex = (this.endScreenIndex - 1 + OPTIONS) % OPTIONS;
+      this.audio.playMenuNav();
+    }
+    if (this.input.menuDown()) {
+      this.endScreenIndex = (this.endScreenIndex + 1) % OPTIONS;
+      this.audio.playMenuNav();
+    }
+    if (this.input.confirm()) {
+      this.audio.playMenuConfirm();
+      this.resetMatch();
+    }
+  }
+
+  // ─── Score pop ─────────────────────────────────────────────────────────
+
+  private tickScorePops(deltaMs: number): void {
+    // Exponential ease-back to 1; delta-time independent
+    const k = 1 - Math.exp(-10 * deltaMs / 1000);
+    this.state.score1Pop += (1 - this.state.score1Pop) * k;
+    this.state.score2Pop += (1 - this.state.score2Pop) * k;
+  }
+
+  // ─── Paddle slide to center (between points) ────────────────────────────
+
+  private slidePaddlesToCenter(deltaMs: number): void {
+    const targetY = (CANVAS_HEIGHT - PADDLE_HEIGHT) / 2;
+    const k = 1 - Math.exp(-6 * deltaMs / 1000); // settles in ~0.5s
+    for (const p of [this.state.player1, this.state.player2]) {
+      p.prevY = p.y;
+      p.y += (targetY - p.y) * k;
+      p.vy = 0;
+    }
+  }
+
+  // ─── Rally tier + drone ─────────────────────────────────────────────────
+
+  private computeRallyTier(count: number): number {
+    if (count >= RALLY_TIER_LEGENDARY) return 4;
+    if (count >= RALLY_TIER_DRAMATIC)  return 3;
+    if (count >= RALLY_TIER_INTENSE)   return 2;
+    if (count >= RALLY_TIER_BUILDING)  return 1;
+    return 0;
+  }
+
+  private updateRallyDrone(): void {
+    const tier = this.computeRallyTier(this.state.rallyCount);
+    if (tier !== this.currentDroneTier) {
+      this.currentDroneTier = tier;
+      this.audio.setRallyDrone(tier);
+    }
+  }
+
+  // ─── Paddle movement (P1; P2 driven by AI) ─────────────────────────────
 
   private updatePaddleMovement(deltaMs: number): void {
     const { state, input } = this;
     const dt = deltaMs / 1000;
     const p1 = state.player1;
 
-    // Record previous Y for spin calculation
     p1.prevY = p1.y;
 
-    // Smooth acceleration toward target velocity
-    const p1Up = input.p1Up();
+    const p1Up   = input.p1Up();
     const p1Down = input.p1Down();
 
     if (p1Up && !p1Down) {
@@ -195,8 +336,6 @@ export class Game {
     } else if (p1Down && !p1Up) {
       p1.vy = Math.min(p1.vy + PADDLE_ACCEL, PADDLE_BASE_SPEED);
     } else {
-      // Power-curved decel: spends longer near FAST (carrying speed), drops
-      // through the middle, then drifts gently to zero — the Mario skid shape.
       const speedNorm = Math.abs(p1.vy) / PADDLE_BASE_SPEED;
       const t = Math.pow(speedNorm, PADDLE_DECEL_CURVE);
       p1.vy *= PADDLE_DECEL_SLOW + (PADDLE_DECEL_FAST - PADDLE_DECEL_SLOW) * t;
@@ -204,36 +343,15 @@ export class Game {
     }
 
     p1.y += p1.vy * dt;
-
-    // Clamp to canvas
     p1.y = Math.max(0, Math.min(CANVAS_HEIGHT - p1.height, p1.y));
-
-    // In toy mode, player2 is not controlled; skip its movement
-    if (!this.toyMode) {
-      const p2 = state.player2;
-      p2.prevY = p2.y;
-      const p2Up = input.p2Up();
-      const p2Down = input.p2Down();
-      if (p2Up && !p2Down) {
-        p2.vy = Math.max(p2.vy - PADDLE_ACCEL, -PADDLE_BASE_SPEED);
-      } else if (p2Down && !p2Up) {
-        p2.vy = Math.min(p2.vy + PADDLE_ACCEL, PADDLE_BASE_SPEED);
-      } else {
-        const speedNorm2 = Math.abs(p2.vy) / PADDLE_BASE_SPEED;
-        const t2 = Math.pow(speedNorm2, PADDLE_DECEL_CURVE);
-        p2.vy *= PADDLE_DECEL_SLOW + (PADDLE_DECEL_FAST - PADDLE_DECEL_SLOW) * t2;
-        if (Math.abs(p2.vy) < 1) p2.vy = 0;
-      }
-      p2.y += p2.vy * dt;
-      p2.y = Math.max(0, Math.min(CANVAS_HEIGHT - p2.height, p2.y));
-    }
   }
 
   private updateAnimations(deltaMs: number): void {
-    const { state } = this;
-    updatePaddleAnimations(state.player1, deltaMs);
-    updatePaddleAnimations(state.player2, deltaMs);
+    updatePaddleAnimations(this.state.player1, deltaMs);
+    updatePaddleAnimations(this.state.player2, deltaMs);
   }
+
+  // ─── Physics ────────────────────────────────────────────────────────────
 
   private updatePhysics(deltaMs: number): void {
     const { state } = this;
@@ -243,29 +361,27 @@ export class Game {
       state.player1,
       state.player2,
       deltaMs,
-      this.toyMode
+      false
     );
 
-    // ── Handle paddle hit ─────────────────────────────────────────────
+    // ── Paddle hit ────────────────────────────────────────────────────
     if (result.hitPaddle !== null) {
       const hitPaddle = result.hitPaddle === 1 ? state.player1 : state.player2;
-      const color = result.hitPaddle === 1 ? COLOR_P1 : COLOR_P2;
+      const color     = result.hitPaddle === 1 ? COLOR_P1 : COLOR_P2;
 
-      // Spawn impact ring at ball position
       spawnImpactRing(state.impactRings, state.ball.x, state.ball.y, color);
-
-      // Screen shake
       triggerShake(state.shake, SHAKE_HIT_INTENSITY, SHAKE_HIT_MS);
 
-      // Audio — pitch-matched with edge factor
       const edgeFactor = (state.ball as Ball & { _edgeFactor?: number })._edgeFactor ?? 0;
       this.audio.playPaddleHit(state.ball.speed, edgeFactor);
 
-      // Rally tracking
       this.rallyHits++;
       state.rallyCount++;
 
-      // Spin discovery: show after 3 rally hits if paddle was moving
+      // Update drone when rally crosses a tier boundary
+      this.updateRallyDrone();
+
+      // Spin discovery: show once after 3 hits with a moving paddle
       if (!this.spinDiscoveryShown && this.rallyHits >= 3 && Math.abs(hitPaddle.vy) > 60) {
         this.spinDiscoveryShown = true;
         this.spinDiscoveryTimer = 1500;
@@ -273,43 +389,54 @@ export class Game {
       }
     }
 
-    // ── Handle wall bounce ────────────────────────────────────────────
-    if (result.hitWall) {
+    // ── Wall bounce ───────────────────────────────────────────────────
+    if (result.hitWall === 'top') {
       this.audio.playWallBounce();
-
-      // Scorch mark at contact point
-      if (result.hitWall === 'top') {
-        spawnWallMark(state.wallMarks, state.ball.x, 0);
-      } else if (result.hitWall === 'bottom') {
-        spawnWallMark(state.wallMarks, state.ball.x, CANVAS_HEIGHT);
-      } else if (result.hitWall === 'right') {
-        spawnWallMark(state.wallMarks, CANVAS_WIDTH, state.ball.y);
-      }
+      spawnWallMark(state.wallMarks, state.ball.x, 0);
+    } else if (result.hitWall === 'bottom') {
+      this.audio.playWallBounce();
+      spawnWallMark(state.wallMarks, state.ball.x, CANVAS_HEIGHT);
     }
 
-    // ── Handle goal ───────────────────────────────────────────────────
+    // ── Goal ──────────────────────────────────────────────────────────
     if (result.goal !== null) {
-      triggerShake(state.shake, SHAKE_GOAL_INTENSITY, SHAKE_GOAL_MS);
-      this.audio.playGoal();
+      const isLegendary = state.rallyCount >= RALLY_TIER_LEGENDARY;
 
-      // Ball looks sad for 500ms
+      // Stop drone immediately — silence is part of the release
+      this.currentDroneTier = 0;
+      this.audio.setRallyDrone(0);
+
+      // Shake — legendary rallies earn a bigger quake
+      if (isLegendary) {
+        triggerShake(state.shake, LEGENDARY_SHAKE_INTENSITY, LEGENDARY_SHAKE_MS);
+      } else {
+        triggerShake(state.shake, SHAKE_GOAL_INTENSITY, SHAKE_GOAL_MS);
+      }
+      this.audio.playGoal(isLegendary);
+
       state.ball.sadTimer = BALL_SAD_MS;
 
       if (result.goal === 1) {
         state.score1++;
-        triggerPaddleEmotion(state.player1, true);   // p1 jumps (scored)
-        triggerPaddleEmotion(state.player2, false);  // p2 sags (conceded)
-        // Ball exited right wall: right half flashes, particles fan left, scored-on = P2 (magenta)
+        state.score1Pop = 1.55;
+        triggerPaddleEmotion(state.player1, true);
+        triggerPaddleEmotion(state.player2, false);
         spawnGoalFlash(state.goalFlashes, 1);
         spawnGoalParticles(state.goalParticles, CANVAS_WIDTH, state.ball.y, COLOR_P2, Math.PI);
+        this.servingToward = false; // P2 conceded → serve toward P2
       } else {
         state.score2++;
+        state.score2Pop = 1.55;
         triggerPaddleEmotion(state.player2, true);
         triggerPaddleEmotion(state.player1, false);
-        // Ball exited left wall: left half flashes, particles fan right, scored-on = P1 (cyan)
         spawnGoalFlash(state.goalFlashes, 2);
         spawnGoalParticles(state.goalParticles, 0, state.ball.y, COLOR_P1, 0);
+        this.servingToward = true; // P1 conceded → serve toward P1
       }
+
+      // Exhale duration scales with how intense the rally was
+      const extraMs = Math.min(state.rallyCount * EXHALE_PER_RALLY_HIT, EXHALE_EXTRA_CAP_MS);
+      const exhaleMs = EXHALE_BASE_MS + extraMs;
 
       if (state.rallyCount > state.longestRally) {
         state.longestRally = state.rallyCount;
@@ -317,8 +444,57 @@ export class Game {
       state.rallyCount = 0;
       this.rallyHits = 0;
 
-      // In toy mode, ball is already reset by physics.ts (left-edge miss → reset)
+      // Freeze ball at center; it will materialise during POINT_SCORED
+      state.ball.vx = 0;
+      state.ball.vy = 0;
+      state.ball.x = CANVAS_WIDTH / 2;
+      state.ball.y = CANVAS_HEIGHT / 2;
+      state.ball.trail = [];
+      state.materializeAlpha = 0;
+
+      this.sparksEarned += SPARKS_PER_POINT;
+
+      if (state.score1 >= MATCH_TARGET || state.score2 >= MATCH_TARGET) {
+        this.sparksEarned += SPARKS_MATCH_WIN;
+        state.phase = 'MATCH_END';
+        this.endScreenIndex = 1;
+        this.audio.playMatchWin();
+      } else {
+        state.phase = 'POINT_SCORED';
+        this.phaseTimer = exhaleMs;
+      }
     }
+  }
+
+  // ─── Match reset ────────────────────────────────────────────────────────
+
+  private resetMatch(): void {
+    const { state } = this;
+    state.score1 = 0;
+    state.score2 = 0;
+    state.rallyCount = 0;
+    state.longestRally = 0;
+    state.impactRings = [];
+    state.wallMarks = [];
+    state.goalFlashes = [];
+    state.goalParticles = [];
+    state.ball = makeBall();
+    state.player1 = makePaddle(1);
+    state.player2 = makePaddle(2);
+    state.shake = makeShake();
+    state.materializeAlpha = 0;
+    state.score1Pop = 1;
+    state.score2Pop = 1;
+
+    this.rallyHits = 0;
+    this.sparksEarned = 0;
+    this.currentDroneTier = 0;
+    this.audio.setRallyDrone(0);
+    this.ai.reset();
+    this.servingToward = true;
+
+    state.phase = 'POINT_SCORED';
+    this.phaseTimer = EXHALE_BASE_MS;
   }
 
   // ─── Render ────────────────────────────────────────────────────────────
@@ -327,20 +503,33 @@ export class Game {
     const { state } = this;
     const [shakeX, shakeY] = getShakeOffset(state.shake);
 
-    if (this.toyMode) {
-      this.renderer.drawToyMode(state, shakeX, shakeY);
+    if (state.phase === 'MATCH_END') {
+      const winner = state.score1 >= MATCH_TARGET ? 'PLAYER WINS!' : 'AI WINS!';
+      this.renderer.drawEndScreen(
+        winner,
+        state.score1,
+        state.score2,
+        state.longestRally,
+        this.sparksEarned,
+        this.endScreenIndex
+      );
+      return;
+    }
 
-      // Spin discovery overlay
-      if (this.spinDiscoveryTimer > 0) {
-        const alpha = Math.min(1, this.spinDiscoveryTimer / 400) *
-                      Math.min(1, (1500 - (1500 - this.spinDiscoveryTimer)) / 300);
-        this.renderer.drawSpinDiscovery(
-          state.ball.x, state.ball.y,
-          Math.min(1, this.spinDiscoveryTimer / 400)
-        );
-      }
-    } else {
-      this.renderer.draw(state, shakeX, shakeY);
+    // All in-play phases share the base scene
+    this.renderer.draw(state, shakeX, shakeY);
+
+    // Countdown overlay during the serve ritual
+    if (state.phase === 'SERVING') {
+      this.renderer.drawCountdown(String(this.countdownStep), state.ball);
+    }
+
+    // Spin discovery toast
+    if (this.spinDiscoveryTimer > 0) {
+      this.renderer.drawSpinDiscovery(
+        state.ball.x, state.ball.y,
+        Math.min(1, this.spinDiscoveryTimer / 400)
+      );
     }
   }
 }

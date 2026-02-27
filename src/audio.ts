@@ -6,6 +6,10 @@ export class AudioManager {
   private masterGain!: GainNode;
   private postGoalSilence = 0; // ms remaining: block non-goal sounds after goal
 
+  // Rally drone — persistent oscillator that fades in with rally intensity
+  private droneOsc: OscillatorNode | null = null;
+  private droneGain: GainNode | null = null;
+
   private getCtx(): AudioContext {
     if (!this.ctx) {
       this.ctx = new AudioContext();
@@ -127,8 +131,11 @@ export class AudioManager {
     this.osc('square', 200, 0.12, 0.045);
   }
 
-  /** Goal scored — dramatic "BWOOOooom": low boom layered with descending sweep. */
-  playGoal(): void {
+  /**
+   * Goal scored — dramatic "BWOOOooom": low boom layered with descending sweep.
+   * @param isLegendary  true when a 20+ hit rally just ended — longer silence
+   */
+  playGoal(isLegendary = false): void {
     if (this.muted) return;
     const actx = this.getCtx();
     const now = actx.currentTime;
@@ -138,18 +145,18 @@ export class AudioManager {
     const boomGain = actx.createGain();
     boom.type = 'sine';
     boom.frequency.setValueAtTime(80, now);
-    boomGain.gain.setValueAtTime(0.4, now);
-    boomGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
+    boomGain.gain.setValueAtTime(isLegendary ? 0.55 : 0.4, now);
+    boomGain.gain.exponentialRampToValueAtTime(0.0001, now + (isLegendary ? 0.45 : 0.3));
     boom.connect(boomGain);
     boomGain.connect(this.masterGain);
     boom.start(now);
-    boom.stop(now + 0.31);
+    boom.stop(now + 0.5);
 
-    // Descending sweep: 500 Hz → 100 Hz over 400ms, gain 0.2, linear fade
+    // Descending sweep: 500 Hz → 100 Hz over 400ms
     const sweep = actx.createOscillator();
     const sweepGain = actx.createGain();
     sweep.type = 'sine';
-    sweep.frequency.setValueAtTime(500, now);
+    sweep.frequency.setValueAtTime(isLegendary ? 650 : 500, now);
     sweep.frequency.linearRampToValueAtTime(100, now + 0.4);
     sweepGain.gain.setValueAtTime(0.2, now);
     sweepGain.gain.linearRampToValueAtTime(0, now + 0.4);
@@ -158,8 +165,48 @@ export class AudioManager {
     sweep.start(now);
     sweep.stop(now + 0.41);
 
-    // 500ms silence: contrast between the boom and quiet is the drama
-    this.postGoalSilence = 500;
+    // Silence: contrast between the boom and quiet is the drama
+    // Legendary rallies earn a longer, more reverent pause
+    this.postGoalSilence = isLegendary ? 900 : 500;
+
+    // Exhale breath tone (~380ms after impact, during the silence)
+    // osc() bypasses postGoalSilence — that's intentional, the exhale IS the silence
+    setTimeout(() => {
+      if (!this.muted && this.ctx) {
+        this.osc('sine', 160, 0.04, 0.5, 80); // quiet descending sigh
+      }
+    }, 380);
+  }
+
+  /**
+   * Set rally drone intensity. tier 0 = silence, 1–4 = building→legendary.
+   * Uses a persistent oscillator so there's no click on tier changes.
+   */
+  setRallyDrone(tier: number): void {
+    if (this.muted && tier > 0) return;
+
+    // Lazy init
+    if (!this.droneOsc && tier > 0) {
+      const actx = this.getCtx();
+      this.droneOsc  = actx.createOscillator();
+      this.droneGain = actx.createGain();
+      this.droneOsc.type = 'sine';
+      this.droneOsc.frequency.value = 65;
+      this.droneGain.gain.value = 0;
+      this.droneOsc.connect(this.droneGain);
+      this.droneGain.connect(this.masterGain);
+      this.droneOsc.start();
+    }
+
+    if (!this.droneGain || !this.ctx) return;
+    const now = this.ctx.currentTime;
+
+    // Target gain and pitch per tier — deeper and louder as intensity builds
+    const gains = [0, 0.032, 0.060, 0.090, 0.140];
+    const freqs = [65,  62,   58,   54,   50  ];
+
+    this.droneGain.gain.setTargetAtTime(gains[Math.min(tier, 4)], now, tier === 0 ? 0.3 : 0.8);
+    this.droneOsc!.frequency.setTargetAtTime(freqs[Math.min(tier, 4)], now, 1.0);
   }
 
   /** Serve countdown beep (pass beepIndex 0, 1, 2) */

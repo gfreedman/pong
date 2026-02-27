@@ -22,7 +22,7 @@ export const BALL_MAX_SPEED      = 720;   // px/s (≈ 12 px/frame)
 export const BALL_MAX_ANGLE_DEG  = 60;    // degrees off horizontal for edge hits
 
 // ─── Ball Trail ────────────────────────────────────────────────────────────
-export const TRAIL_LENGTH        = 14;    // number of trail points
+export const TRAIL_LENGTH        = 22;    // max stored trail points (grows with rally)
 export const TRAIL_INTERVAL_MS   = 14;    // ms between trail captures
 
 // ─── Paddle ────────────────────────────────────────────────────────────────
@@ -110,6 +110,39 @@ export const SURVIVAL_LIVES      = 5;
 export const SERVE_ANGLE_RANGE   = 30;   // ± degrees from horizontal
 export const SERVE_COUNTDOWN_MS  = 1000; // after player signals ready
 export const SERVE_AUTO_READY_MS = 5000; // PvP auto-serve timeout
+
+// ─── Phase Timers ──────────────────────────────────────────────────────────
+export const POINT_SCORED_PAUSE_MS = 800; // legacy — replaced by rally-dependent exhale
+
+// ─── Rally Escalation Tiers ───────────────────────────────────────────────
+export const RALLY_TIER_BUILDING   = 4;   // hits  4-7:  subtle bass, longer trail
+export const RALLY_TIER_INTENSE    = 8;   // hits  8-12: court glows, zoom begins
+export const RALLY_TIER_DRAMATIC   = 13;  // hits 13-19: speed lines, warm background
+export const RALLY_TIER_LEGENDARY  = 20;  // hits 20+:   edge pulse, max everything
+
+// ─── Breath / Exhale Between Points ──────────────────────────────────────
+export const EXHALE_BASE_MS        = 900;  // base pause after every goal
+export const EXHALE_PER_RALLY_HIT  = 65;  // extra ms per rally hit (before goal)
+export const EXHALE_EXTRA_CAP_MS   = 1500; // cap on extra exhale
+export const BALL_MATERIALIZE_MS   = 700;  // ball fades in over this during exhale
+
+// ─── Serve Pending ────────────────────────────────────────────────────────
+export const SERVE_PENDING_AI_MS   = 1800; // AI auto-readies after this
+
+// ─── Rally Zoom ───────────────────────────────────────────────────────────
+export const ZOOM_INTENSE          = 0.010; // canvas scale delta at intense
+export const ZOOM_DRAMATIC         = 0.018; // 1.018×
+export const ZOOM_LEGENDARY        = 0.025; // 1.025×
+
+// ─── Legendary Goal ───────────────────────────────────────────────────────
+export const LEGENDARY_SHAKE_INTENSITY = 10; // px — bigger shake for legendary rallies
+export const LEGENDARY_SHAKE_MS        = 600;
+
+// ─── AI Tuning ─────────────────────────────────────────────────────────────
+export const AI_SPEED_FACTOR       = 0.85; // fraction of PADDLE_BASE_SPEED AI can reach
+export const AI_REACTION_DELAY_MIN = 120;  // ms min between AI target recalculations
+export const AI_REACTION_DELAY_MAX = 180;  // ms max between AI target recalculations
+export const AI_TARGET_OFFSET_MAX  = 40;   // ±px random error on predicted Y
 
 // ─── Upgrade Costs (Neon Sparks ⚡) ───────────────────────────────────────
 export const COST_WIDE_PADDLE    = 5;

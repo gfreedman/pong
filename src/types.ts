@@ -8,6 +8,8 @@ export type GamePhase =
   | 'DIFFICULTY_SELECT'
   | 'SIDE_SELECT'
   | 'POINT_SCORED'
+  | 'SERVE_PENDING'
+  | 'SERVING'
   | 'MATCH_END'
   | 'UPGRADE_SHOP';
 
@@ -116,4 +118,9 @@ export interface GameState {
   rallyCount: number;
   longestRally: number;
   isFirstLaunch: boolean;   // Nintendo first-launch experience flag
+
+  // Phase 3 — rhythm
+  materializeAlpha: number;  // 0 → 1: ball fades in during exhale phase
+  score1Pop: number;         // > 1: score number scale bounce, eases back to 1
+  score2Pop: number;
 }
