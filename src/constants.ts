@@ -27,10 +27,15 @@ export const TRAIL_INTERVAL_MS   = 14;    // ms between trail captures
 // ─── Paddle ────────────────────────────────────────────────────────────────
 export const PADDLE_WIDTH        = 12;    // px
 export const PADDLE_HEIGHT       = 80;    // px base
-export const PADDLE_BASE_SPEED   = 370;   // px/s max
+export const PADDLE_BASE_SPEED   = 520;   // px/s max
 export const PADDLE_MARGIN       = 30;    // px from canvas edge
-export const PADDLE_ACCEL        = 18;    // speed gained per frame (px/s, at 60fps ~ 1080/s²)
-export const PADDLE_DECEL        = 0.82;  // velocity multiplier per frame when no input
+export const PADDLE_ACCEL        = 26;    // speed gained per frame (px/s, at 60fps ~ 1560/s²)
+// Ease-in decel with Mario-skid shape: paddle carries momentum well at high
+// speed, then the decel kicks in through the middle, then drifts gently to
+// zero at the end (rather than snapping). Curve exponent controls the shape.
+export const PADDLE_DECEL_FAST   = 0.96; // multiplier when near max speed (more carry)
+export const PADDLE_DECEL_SLOW   = 0.96; // multiplier when nearly stopped (gentle drift)
+export const PADDLE_DECEL_CURVE  = 1.6;  // power curve — >1 = spend longer near FAST
 export const PADDLE_OVERSHOOT    = 0.10;  // fraction of velocity that "bleeds" past stop
 
 // ─── Paddle Breathing ──────────────────────────────────────────────────────

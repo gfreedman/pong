@@ -5,7 +5,7 @@ import {
   CANVAS_WIDTH, CANVAS_HEIGHT,
   BALL_RADIUS, BALL_BASE_SPEED,
   PADDLE_WIDTH, PADDLE_HEIGHT, PADDLE_BASE_SPEED, PADDLE_MARGIN,
-  PADDLE_ACCEL, PADDLE_DECEL,
+  PADDLE_ACCEL, PADDLE_DECEL_FAST, PADDLE_DECEL_SLOW, PADDLE_DECEL_CURVE,
   COLOR_P1, COLOR_P2,
   SHAKE_HIT_INTENSITY, SHAKE_HIT_MS,
   SHAKE_GOAL_INTENSITY, SHAKE_GOAL_MS,
@@ -183,9 +183,12 @@ export class Game {
     } else if (p1Down && !p1Up) {
       p1.vy = Math.min(p1.vy + PADDLE_ACCEL, PADDLE_BASE_SPEED);
     } else {
-      // Decelerate
-      p1.vy *= PADDLE_DECEL;
-      if (Math.abs(p1.vy) < 0.5) p1.vy = 0;
+      // Power-curved decel: spends longer near FAST (carrying speed), drops
+      // through the middle, then drifts gently to zero — the Mario skid shape.
+      const speedNorm = Math.abs(p1.vy) / PADDLE_BASE_SPEED;
+      const t = Math.pow(speedNorm, PADDLE_DECEL_CURVE);
+      p1.vy *= PADDLE_DECEL_SLOW + (PADDLE_DECEL_FAST - PADDLE_DECEL_SLOW) * t;
+      if (Math.abs(p1.vy) < 1) p1.vy = 0;
     }
 
     p1.y += p1.vy * dt;
@@ -204,8 +207,10 @@ export class Game {
       } else if (p2Down && !p2Up) {
         p2.vy = Math.min(p2.vy + PADDLE_ACCEL, PADDLE_BASE_SPEED);
       } else {
-        p2.vy *= PADDLE_DECEL;
-        if (Math.abs(p2.vy) < 0.5) p2.vy = 0;
+        const speedNorm2 = Math.abs(p2.vy) / PADDLE_BASE_SPEED;
+        const t2 = Math.pow(speedNorm2, PADDLE_DECEL_CURVE);
+        p2.vy *= PADDLE_DECEL_SLOW + (PADDLE_DECEL_FAST - PADDLE_DECEL_SLOW) * t2;
+        if (Math.abs(p2.vy) < 1) p2.vy = 0;
       }
       p2.y += p2.vy * dt;
       p2.y = Math.max(0, Math.min(CANVAS_HEIGHT - p2.height, p2.y));
