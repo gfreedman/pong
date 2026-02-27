@@ -1,0 +1,13 @@
+{
+  "name": "neon-pong",
+  "version": "0.1.0",
+  "description": "Canvas-based Pong with neon aesthetics, spin physics, and juice",
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --outfile=dist/script.js --target=es2020",
+    "dev": "esbuild src/main.ts --bundle --outfile=dist/script.js --target=es2020 --watch",
+    "test": "node --test tests/pong.test.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.20.0"
+  }
+}
