@@ -3,7 +3,7 @@
 import { Ball, Paddle, ImpactRing, WallMark, GoalFlash, GoalParticle, GameState, GamePhase } from './types.js';
 import {
   CANVAS_WIDTH, CANVAS_HEIGHT,
-  COLOR_BG, COLOR_P1, COLOR_P2, COLOR_BALL, COLOR_COURT, COLOR_SPARK,
+  COLOR_BG, COLOR_P1, COLOR_P2, COLOR_BALL, COLOR_COURT, COLOR_SPARK, COLOR_HIT_FLASH,
   GLOW_PADDLE, GLOW_BALL, GLOW_RING,
   TRAIL_LENGTH,
   SQUASH_DURATION_MS, STRETCH_DURATION_MS, SQUASH_AMOUNT, STRETCH_AMOUNT,
@@ -12,6 +12,7 @@ import {
   RING_MAX_RADIUS, RING_DURATION_MS,
   WALL_MARK_FADE_MS,
   HIT_EYE_FLASH_MS, BALL_SAD_MS,
+  PADDLE_COLOR_FLASH_MS,
   GOAL_FLASH_MS, GOAL_PARTICLE_MS,
 } from './constants.js';
 
@@ -390,7 +391,19 @@ export class Renderer {
 
   drawPaddle(paddle: Paddle): void {
     const { ctx } = this;
-    const color = paddle.id === 1 ? COLOR_P1 : COLOR_P2;
+    const baseColor = paddle.id === 1 ? COLOR_P1 : COLOR_P2;
+
+    // Color flash: lerp base color → orange → base over PADDLE_COLOR_FLASH_MS
+    // Uses a tent curve so the peak orange is at the midpoint of the animation,
+    // giving a clear "blue → orange → blue" transition.
+    let color = baseColor;
+    if (paddle.colorFlashTimer > 0) {
+      const t = paddle.colorFlashTimer / PADDLE_COLOR_FLASH_MS; // 1 → 0
+      // Tent: sin(t*π) peaks at t=0.5 → sin(π/2)=1. At t=1 and t=0 it's 0.
+      // But we want instant orange at hit, so shift peak earlier: sin(t * π * 0.9 + 0.1)
+      const intensity = Math.sin(t * Math.PI);
+      color = this.lerpColor(baseColor, COLOR_HIT_FLASH, intensity);
+    }
 
     const px = paddle.x + paddle.recoilOffset;
     const py = paddle.y + paddle.emotionOffset;
@@ -402,36 +415,51 @@ export class Renderer {
 
     // Chromatic aberration flash
     if (paddle.chromaticTimer > 0) {
-      const t = paddle.chromaticTimer / 50; // normalized 0→1
+      const t = paddle.chromaticTimer / 50;
       const off = CHROMATIC_OFFSET * t;
 
       ctx.save();
       ctx.globalAlpha = 0.45 * t;
-      // Red channel
       ctx.fillStyle = '#ff0000';
       ctx.fillRect(px - off, pyAdj, pw, ph);
-      // Blue channel
       ctx.fillStyle = '#0000ff';
       ctx.fillRect(px + off, pyAdj, pw, ph);
       ctx.restore();
     }
 
-    // Glow halo
+    // Glow halo — blooms brighter and wider during color flash
+    const flashBoost = paddle.colorFlashTimer > 0
+      ? Math.sin((paddle.colorFlashTimer / PADDLE_COLOR_FLASH_MS) * Math.PI)
+      : 0;
     ctx.save();
     ctx.shadowColor = color;
-    ctx.shadowBlur = GLOW_PADDLE * 1.5;
+    ctx.shadowBlur = GLOW_PADDLE * 1.5 + flashBoost * 24;
     ctx.fillStyle = color;
-    ctx.globalAlpha = 0.25;
+    ctx.globalAlpha = 0.25 + flashBoost * 0.35;
     ctx.fillRect(px - 2, pyAdj - 2, pw + 4, ph + 4);
     ctx.restore();
 
     // Main paddle body
     ctx.save();
     ctx.shadowColor = color;
-    ctx.shadowBlur = GLOW_PADDLE;
+    ctx.shadowBlur = GLOW_PADDLE + flashBoost * 12;
     ctx.fillStyle = color;
     ctx.fillRect(px, pyAdj, pw, ph);
     ctx.restore();
+  }
+
+  /** Linear RGB interpolation between two hex/rgb color strings. t=0 → c1, t=1 → c2. */
+  private lerpColor(c1: string, c2: string, t: number): string {
+    const parse = (c: string) => {
+      const m = c.match(/\w\w/g)!;
+      return [parseInt(m[0], 16), parseInt(m[1], 16), parseInt(m[2], 16)];
+    };
+    const [r1, g1, b1] = parse(c1);
+    const [r2, g2, b2] = parse(c2);
+    const r = Math.round(r1 + (r2 - r1) * t);
+    const g = Math.round(g1 + (g2 - g1) * t);
+    const b = Math.round(b1 + (b2 - b1) * t);
+    return `rgb(${r},${g},${b})`;
   }
 
   // ─── Impact Rings ───────────────────────────────────────────────────────

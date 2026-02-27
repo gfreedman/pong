@@ -58,6 +58,7 @@ function makePaddle(side: 1 | 2): Paddle {
     recoilOffset: 0, recoilVelocity: 0,
     breathPhase: side === 2 ? Math.PI : 0, // offset so they don't breathe in sync
     chromaticTimer: 0,
+    colorFlashTimer: 0,
     emotionOffset: 0, emotionVelocity: 0,
     id: side,
   };

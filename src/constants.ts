@@ -12,6 +12,7 @@ export const COLOR_P2          = '#ff00aa';   // magenta
 export const COLOR_BALL        = '#ffffff';
 export const COLOR_COURT       = 'rgba(0, 240, 255, 0.18)';
 export const COLOR_SPARK       = '#ffe600';
+export const COLOR_HIT_FLASH   = '#ff6600';   // orange — paddle color-flash on hit
 
 // ─── Ball (velocities in px/s) ────────────────────────────────────────────
 export const BALL_RADIUS         = 12;
@@ -62,8 +63,9 @@ export const PADDLE_RECOIL_PX    = 5;    // px pushed back on hit
 export const RECOIL_SPRING_K     = 28;   // spring stiffness
 export const RECOIL_SPRING_DAMP  = 0.65; // spring damping per frame
 
-export const CHROMATIC_MS        = 50;   // chromatic aberration flash duration
-export const CHROMATIC_OFFSET    = 3;    // px channel offset
+export const CHROMATIC_MS           = 50;   // chromatic aberration flash duration
+export const CHROMATIC_OFFSET       = 3;    // px channel offset
+export const PADDLE_COLOR_FLASH_MS  = 180;  // paddle color-flash total duration
 
 // ─── Impact Ring ───────────────────────────────────────────────────────────
 export const RING_MAX_RADIUS     = 44;   // px

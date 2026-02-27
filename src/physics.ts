@@ -11,7 +11,7 @@ import {
   HITSTOP_SLOW_MS, HITSTOP_FAST_MS, HITSTOP_SPEED_THRESHOLD,
   SQUASH_DURATION_MS, STRETCH_DURATION_MS,
   PADDLE_RECOIL_PX, RECOIL_SPRING_K, RECOIL_SPRING_DAMP,
-  CHROMATIC_MS,
+  CHROMATIC_MS, PADDLE_COLOR_FLASH_MS,
   RING_MAX_RADIUS, RING_DURATION_MS,
   SHAKE_HIT_INTENSITY, SHAKE_HIT_MS,
   EMOTION_JUMP_PX, EMOTION_SAG_PX, EMOTION_SPRING_K, EMOTION_SPRING_DAMP,
@@ -209,8 +209,9 @@ function resolvePaddleHit(ball: Ball, paddle: Paddle, fromRight: boolean): void 
   const recoilDir = fromRight ? 1 : -1;
   paddle.recoilVelocity = recoilDir * PADDLE_RECOIL_PX * RECOIL_SPRING_K;
 
-  // Chromatic flash
-  paddle.chromaticTimer = CHROMATIC_MS;
+  // Chromatic flash + color flash
+  paddle.chromaticTimer   = CHROMATIC_MS;
+  paddle.colorFlashTimer  = PADDLE_COLOR_FLASH_MS;
 
   // Eye wide reaction
   ball.hitFlashTimer = HIT_EYE_FLASH_MS;
@@ -256,6 +257,11 @@ export function updatePaddleAnimations(paddle: Paddle, deltaMs: number): void {
   // ── Chromatic timer ──────────────────────────────────────────────────
   if (paddle.chromaticTimer > 0) {
     paddle.chromaticTimer = Math.max(0, paddle.chromaticTimer - deltaMs);
+  }
+
+  // ── Color flash timer ────────────────────────────────────────────────
+  if (paddle.colorFlashTimer > 0) {
+    paddle.colorFlashTimer = Math.max(0, paddle.colorFlashTimer - deltaMs);
   }
 
   // ── Breath oscillation ───────────────────────────────────────────────

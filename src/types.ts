@@ -88,6 +88,7 @@ export interface Paddle {
   recoilVelocity: number;   // spring velocity
   breathPhase: number;      // radians (idle breathing oscillation)
   chromaticTimer: number;   // ms remaining for chromatic-aberration flash
+  colorFlashTimer: number;  // ms remaining for hit color flash (base → orange → base)
   emotionOffset: number;    // px vertical sag/jump on goal (eases to 0)
   emotionVelocity: number;  // spring velocity for emotion
 
