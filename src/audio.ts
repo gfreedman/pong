@@ -4,6 +4,7 @@ export class AudioManager {
   private ctx: AudioContext | null = null;
   private muted = false;
   private masterGain!: GainNode;
+  private postGoalSilence = 0; // ms remaining: block non-goal sounds after goal
 
   private getCtx(): AudioContext {
     if (!this.ctx) {
@@ -23,6 +24,13 @@ export class AudioManager {
   }
 
   get isMuted(): boolean { return this.muted; }
+
+  /** Advance post-goal silence timer. Call once per frame. */
+  tick(deltaMs: number): void {
+    if (this.postGoalSilence > 0) {
+      this.postGoalSilence = Math.max(0, this.postGoalSilence - deltaMs);
+    }
+  }
 
   // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -80,38 +88,78 @@ export class AudioManager {
   // ── Game sounds ────────────────────────────────────────────────────────
 
   /**
-   * Pitch-matched paddle hit: slow ball = low tok, fast ball = high TAK.
-   * Also encodes contact position (center vs edge) as slight timbre shift.
+   * Playful "bwip" paddle hit.
+   * Pitch maps to speed (330–660 Hz), bends up 100 Hz over 30ms.
+   * Edge hits use triangle wave + 30 cent detune for a softer off-pitch feel.
    * @param speed       ball speed in px/s
    * @param edgeFactor  0 = center hit, 1 = edge hit
    */
   playPaddleHit(speed: number, edgeFactor = 0): void {
-    const minSpeed = 300, maxSpeed = 720;
-    const t = Math.min(Math.max((speed - minSpeed) / (maxSpeed - minSpeed), 0), 1);
+    if (this.muted || this.postGoalSilence > 0) return;
+    const actx = this.getCtx();
+    const now = actx.currentTime;
 
-    // Center: 320–700 Hz sine; Edge: 420–900 Hz with slight detune (more clicky)
-    const baseFreq = 320 + t * 380;
-    const freq = baseFreq + edgeFactor * 200;
-    const type: OscillatorType = edgeFactor > 0.5 ? 'triangle' : 'sine';
-    const vol = 0.22 + t * 0.12;
+    // Map speed → freq: 330 Hz (slow) to 660 Hz (fast)
+    const t = Math.min(Math.max((speed - 300) / 420, 0), 1);
+    const freq = 330 + t * 330;
+    const isEdge = edgeFactor > 0.5;
 
-    this.osc(type, freq, vol, 0.07 + t * 0.02);
+    const osc = actx.createOscillator();
+    const gain = actx.createGain();
 
-    // Subtle "click" transient for edge hits
-    if (edgeFactor > 0.4) {
-      this.osc('square', freq * 2, 0.06, 0.015);
-    }
+    osc.type = isEdge ? 'triangle' : 'sine';
+    osc.frequency.setValueAtTime(freq, now);
+    osc.frequency.linearRampToValueAtTime(freq + 100, now + 0.03); // pitch bend up
+    if (isEdge) osc.detune.setValueAtTime(30, now); // +30 cents softer detune
+
+    gain.gain.setValueAtTime(0.3, now);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(now);
+    osc.stop(now + 0.09);
   }
 
   /** Lighter wall bounce — no hitstop, softer timbre */
   playWallBounce(): void {
+    if (this.postGoalSilence > 0) return;
     this.osc('square', 200, 0.12, 0.045);
   }
 
-  /** Goal scored — dramatic descending sweep */
+  /** Goal scored — dramatic "BWOOOooom": low boom layered with descending sweep. */
   playGoal(): void {
-    this.osc('sine', 580, 0.35, 0.35, 180);
-    setTimeout(() => this.osc('sine', 300, 0.2, 0.25, 100), 200);
+    if (this.muted) return;
+    const actx = this.getCtx();
+    const now = actx.currentTime;
+
+    // Impact boom: 80 Hz sine, gain 0.4, exponential decay over 300ms
+    const boom = actx.createOscillator();
+    const boomGain = actx.createGain();
+    boom.type = 'sine';
+    boom.frequency.setValueAtTime(80, now);
+    boomGain.gain.setValueAtTime(0.4, now);
+    boomGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
+    boom.connect(boomGain);
+    boomGain.connect(this.masterGain);
+    boom.start(now);
+    boom.stop(now + 0.31);
+
+    // Descending sweep: 500 Hz → 100 Hz over 400ms, gain 0.2, linear fade
+    const sweep = actx.createOscillator();
+    const sweepGain = actx.createGain();
+    sweep.type = 'sine';
+    sweep.frequency.setValueAtTime(500, now);
+    sweep.frequency.linearRampToValueAtTime(100, now + 0.4);
+    sweepGain.gain.setValueAtTime(0.2, now);
+    sweepGain.gain.linearRampToValueAtTime(0, now + 0.4);
+    sweep.connect(sweepGain);
+    sweepGain.connect(this.masterGain);
+    sweep.start(now);
+    sweep.stop(now + 0.41);
+
+    // 500ms silence: contrast between the boom and quiet is the drama
+    this.postGoalSilence = 500;
   }
 
   /** Serve countdown beep (pass beepIndex 0, 1, 2) */

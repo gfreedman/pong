@@ -1,6 +1,6 @@
 // Game — state machine, game loop, orchestration
 
-import { Ball, Paddle, GameState, GamePhase, ImpactRing, WallMark, ScreenShake } from './types.js';
+import { Ball, Paddle, GameState, GamePhase, ImpactRing, WallMark, ScreenShake, GoalFlash, GoalParticle } from './types.js';
 import {
   CANVAS_WIDTH, CANVAS_HEIGHT,
   BALL_RADIUS, BALL_BASE_SPEED,
@@ -9,6 +9,7 @@ import {
   COLOR_P1, COLOR_P2,
   SHAKE_HIT_INTENSITY, SHAKE_HIT_MS,
   SHAKE_GOAL_INTENSITY, SHAKE_GOAL_MS,
+  BALL_SAD_MS,
   SERVE_COUNTDOWN_MS,
 } from './constants.js';
 import { InputManager } from './input.js';
@@ -20,6 +21,8 @@ import {
   spawnWallMark, updateWallMarks,
   updateScreenShake, triggerShake, getShakeOffset,
   triggerPaddleEmotion,
+  spawnGoalFlash, updateGoalFlashes,
+  spawnGoalParticles, updateGoalParticles,
 } from './physics.js';
 
 function makeBall(): Ball {
@@ -35,6 +38,8 @@ function makeBall(): Ball {
     hitstopTimer: 0,
     squashTimer: 0,
     stretchTimer: 0,
+    hitFlashTimer: 0,
+    sadTimer: 0,
     trail: [],
     trailTimer: 0,
   };
@@ -97,6 +102,8 @@ export class Game {
       score2: 0,
       impactRings: [],
       wallMarks: [],
+      goalFlashes: [],
+      goalParticles: [],
       shake: makeShake(),
       rallyCount: 0,
       longestRally: 0,
@@ -153,7 +160,10 @@ export class Game {
 
     updateImpactRings(state.impactRings, deltaMs);
     updateWallMarks(state.wallMarks, deltaMs);
+    updateGoalFlashes(state.goalFlashes, deltaMs);
+    updateGoalParticles(state.goalParticles, deltaMs);
     updateScreenShake(state.shake, deltaMs);
+    this.audio.tick(deltaMs);
 
     // Spin discovery timer
     if (this.spinDiscoveryTimer > 0) {
@@ -281,14 +291,23 @@ export class Game {
       triggerShake(state.shake, SHAKE_GOAL_INTENSITY, SHAKE_GOAL_MS);
       this.audio.playGoal();
 
+      // Ball looks sad for 500ms
+      state.ball.sadTimer = BALL_SAD_MS;
+
       if (result.goal === 1) {
         state.score1++;
         triggerPaddleEmotion(state.player1, true);   // p1 jumps (scored)
         triggerPaddleEmotion(state.player2, false);  // p2 sags (conceded)
+        // Ball exited right wall: right half flashes, particles fan left, scored-on = P2 (magenta)
+        spawnGoalFlash(state.goalFlashes, 1);
+        spawnGoalParticles(state.goalParticles, CANVAS_WIDTH, state.ball.y, COLOR_P2, Math.PI);
       } else {
         state.score2++;
         triggerPaddleEmotion(state.player2, true);
         triggerPaddleEmotion(state.player1, false);
+        // Ball exited left wall: left half flashes, particles fan right, scored-on = P1 (cyan)
+        spawnGoalFlash(state.goalFlashes, 2);
+        spawnGoalParticles(state.goalParticles, 0, state.ball.y, COLOR_P1, 0);
       }
 
       if (state.rallyCount > state.longestRally) {

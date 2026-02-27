@@ -47,12 +47,31 @@ export interface Ball {
   squashTimer: number;
   stretchTimer: number;
 
+  // Face expression timers (ms)
+  hitFlashTimer: number;  // eye widens 1.3x for ~4 frames after paddle hit
+  sadTimer: number;       // frown + small eye (0.8x) for 500ms after goal
+
   // Spin visual accumulator — driven by spin magnitude, used to rotate spin lines
   spinAngle: number;  // radians
 
   // Trail history (newest first)
   trail: TrailPoint[];
   trailTimer: number; // ms since last trail point captured
+}
+
+export interface GoalFlash {
+  side: 1 | 2;  // 1 = P1 scored (right half flashes), 2 = P2 scored (left half flashes)
+  age: number;  // ms elapsed
+}
+
+export interface GoalParticle {
+  x: number;
+  y: number;
+  vx: number;    // px/s
+  vy: number;    // px/s
+  size: number;  // radius px
+  age: number;   // ms elapsed
+  color: string;
 }
 
 export interface Paddle {
@@ -90,6 +109,8 @@ export interface GameState {
   score2: number;
   impactRings: ImpactRing[];
   wallMarks: WallMark[];
+  goalFlashes: GoalFlash[];
+  goalParticles: GoalParticle[];
   shake: ScreenShake;
   rallyCount: number;
   longestRally: number;

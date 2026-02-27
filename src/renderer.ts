@@ -1,6 +1,6 @@
 // Renderer — all canvas drawing; pure output, no state mutation
 
-import { Ball, Paddle, ImpactRing, WallMark, GameState, GamePhase } from './types.js';
+import { Ball, Paddle, ImpactRing, WallMark, GoalFlash, GoalParticle, GameState, GamePhase } from './types.js';
 import {
   CANVAS_WIDTH, CANVAS_HEIGHT,
   COLOR_BG, COLOR_P1, COLOR_P2, COLOR_BALL, COLOR_COURT, COLOR_SPARK,
@@ -11,6 +11,8 @@ import {
   CHROMATIC_OFFSET,
   RING_MAX_RADIUS, RING_DURATION_MS,
   WALL_MARK_FADE_MS,
+  HIT_EYE_FLASH_MS, BALL_SAD_MS,
+  GOAL_FLASH_MS, GOAL_PARTICLE_MS,
 } from './constants.js';
 
 export class Renderer {
@@ -33,11 +35,13 @@ export class Renderer {
     this.drawBackground();
     this.drawWallMarks(state.wallMarks);
     this.drawCourt();
+    this.drawGoalParticles(state.goalParticles);
     this.drawBallTrail(state.ball);
     this.drawBall(state.ball);
     this.drawPaddle(state.player1);
     this.drawPaddle(state.player2);
     this.drawImpactRings(state.impactRings);
+    this.drawGoalFlashes(state.goalFlashes);
 
     ctx.restore();
 
@@ -54,10 +58,12 @@ export class Renderer {
     this.drawBackground();
     this.drawWallMarks(state.wallMarks);
     this.drawToyCourtMarkings();
+    this.drawGoalParticles(state.goalParticles);
     this.drawBallTrail(state.ball);
     this.drawBall(state.ball);
     this.drawPaddle(state.player1);
     this.drawImpactRings(state.impactRings);
+    this.drawGoalFlashes(state.goalFlashes);
 
     ctx.restore();
   }
@@ -164,18 +170,19 @@ export class Renderer {
     let scaleX = 1;
     let scaleY = 1;
 
+    // After ctx.rotate(angle), local X = travel direction, local Y = perpendicular.
     if (ball.squashTimer > 0) {
-      // Squash: flatten in travel direction, expand perpendicular
+      // Squash against paddle face: compress in travel (local X), expand perp (local Y)
       const t = ball.squashTimer / SQUASH_DURATION_MS;
-      const s = 1 + (SQUASH_AMOUNT - 1) * t;
-      scaleX = s;       // elongated perpendicular (local Y after rotation)
-      scaleY = 1 / s;   // flattened in travel direction
+      const s = 1 + (SQUASH_AMOUNT - 1) * t; // s < 1 at peak
+      scaleX = s;       // compressed in travel direction
+      scaleY = 1 / s;   // expanded perpendicular
     } else if (ball.stretchTimer > 0) {
-      // Stretch: elongate in travel direction
+      // Stretch in travel direction: elongate local X, narrow local Y
       const t = ball.stretchTimer / STRETCH_DURATION_MS;
-      const s = 1 + (STRETCH_AMOUNT - 1) * t;
-      scaleX = 1 / s;   // narrow perp
-      scaleY = s;        // elongated in travel
+      const s = 1 + (STRETCH_AMOUNT - 1) * t; // s > 1 at peak
+      scaleX = s;       // elongated in travel direction
+      scaleY = 1 / s;   // narrowed perpendicular
     }
 
     // Outer glow
@@ -232,7 +239,15 @@ export class Renderer {
     const dirX = ball.vx >= 0 ? 1 : -1;
     const eyeX = r * 0.15 * dirX;
     const eyeY = -r * 0.35;   // always above centre
-    const eyeR = r * 0.30;
+
+    // Eye radius reacts: wider on hit (1.3x), smaller when sad (0.8x)
+    let eyeR = r * 0.30;
+    if (ball.hitFlashTimer > 0) {
+      const flashT = ball.hitFlashTimer / HIT_EYE_FLASH_MS;
+      eyeR *= 1 + 0.3 * flashT;   // up to 1.3x
+    } else if (ball.sadTimer > 0) {
+      eyeR *= 0.8;                 // 0.8x when sad
+    }
 
     ctx.save();
     ctx.shadowBlur  = 0;
@@ -267,14 +282,16 @@ export class Renderer {
   }
 
   // Mouth — world space, no rotation. x mirrors with vx sign, always lower half.
-  // arc(cx, cy, r, 0, π, false) = clockwise right→bottom→left = ∪ smile, always.
+  // Smile: arc(cx, cy, r, 0, π, false) = clockwise right→bottom→left = ∪
+  // Frown: arc(cx, cy, r, 0, π, true)  = counterclockwise right→top→left = ∩
   private drawBallMouth(ball: Ball): void {
     const { ctx } = this;
-    const r     = ball.radius;
+    const r      = ball.radius;
     const dirX   = ball.vx >= 0 ? 1 : -1;
     const mouthX = r * 0.70 * dirX;  // pushed to forward edge of ball
     const mouthY = r * 0.30;
     const mouthR = r * 0.28;
+    const sad    = ball.sadTimer > 0;
 
     ctx.save();
     ctx.shadowBlur  = 0;
@@ -283,7 +300,9 @@ export class Renderer {
     ctx.lineWidth   = 1.5;
     ctx.lineCap     = 'round';
     ctx.beginPath();
-    ctx.arc(mouthX, mouthY, mouthR, 0, Math.PI, false);
+    // Frown: slightly above center (mouthY - mouthR*0.5) so it sits in lower half
+    const arcY = sad ? mouthY - mouthR * 0.6 : mouthY;
+    ctx.arc(mouthX, arcY, mouthR, 0, Math.PI, sad);
     ctx.stroke();
     ctx.restore();
   }
@@ -311,6 +330,43 @@ export class Renderer {
       ctx.stroke();
     }
     ctx.restore();
+  }
+
+  // ─── Goal Flash ─────────────────────────────────────────────────────────
+
+  // Full-width flash on the scoring side of the court.
+  // side 1 = P1 scored → right half flashes; side 2 = P2 scored → left half.
+  private drawGoalFlashes(flashes: GoalFlash[]): void {
+    const { ctx } = this;
+    for (const flash of flashes) {
+      const t = flash.age / GOAL_FLASH_MS;
+      // Hold at 20% for first quarter (≈ 2 frames), fade to 0 over the rest
+      const alpha = t < 0.25 ? 0.20 : 0.20 * (1 - (t - 0.25) / 0.75);
+      const x = flash.side === 1 ? CANVAS_WIDTH / 2 : 0;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, alpha);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(x, 0, CANVAS_WIDTH / 2, CANVAS_HEIGHT);
+      ctx.restore();
+    }
+  }
+
+  // ─── Goal Particles ──────────────────────────────────────────────────────
+
+  private drawGoalParticles(particles: GoalParticle[]): void {
+    const { ctx } = this;
+    for (const p of particles) {
+      const alpha = Math.max(0, 1 - p.age / GOAL_PARTICLE_MS);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = p.color;
+      ctx.shadowColor = p.color;
+      ctx.shadowBlur = 4;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
   }
 
   // ─── Paddle ─────────────────────────────────────────────────────────────

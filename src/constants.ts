@@ -72,8 +72,8 @@ export const RING_DURATION_MS    = 160;  // ms
 // ─── Screen Shake ──────────────────────────────────────────────────────────
 export const SHAKE_HIT_INTENSITY = 2;    // px
 export const SHAKE_HIT_MS        = 160;
-export const SHAKE_GOAL_INTENSITY= 5;    // px
-export const SHAKE_GOAL_MS       = 250;
+export const SHAKE_GOAL_INTENSITY= 6;    // px
+export const SHAKE_GOAL_MS       = 300;
 
 // ─── Neon Glow ─────────────────────────────────────────────────────────────
 export const GLOW_PADDLE         = 14;   // shadowBlur radius for paddles
@@ -82,9 +82,19 @@ export const GLOW_RING           = 8;
 
 // ─── Paddle Emotion ────────────────────────────────────────────────────────
 export const EMOTION_JUMP_PX     = -5;   // score: paddle jumps up briefly
-export const EMOTION_SAG_PX      = 4;    // concede: paddle sags down
+export const EMOTION_SAG_PX      = 8;    // concede: paddle sags down
 export const EMOTION_SPRING_K    = 18;
 export const EMOTION_SPRING_DAMP = 0.6;
+
+// ─── Ball Face Reactions ───────────────────────────────────────────────────
+export const HIT_EYE_FLASH_MS    = 67;   // ~4 frames: eye widens after paddle hit
+export const BALL_SAD_MS         = 500;  // ms: frown + small eye after goal
+
+// ─── Goal Effects ──────────────────────────────────────────────────────────
+export const GOAL_FLASH_MS        = 133;  // 8 frames: half-court white flash
+export const GOAL_PARTICLE_MS     = 667;  // 40 frames at 60fps
+export const GOAL_PARTICLE_COUNT  = 35;
+export const GOAL_PARTICLE_GRAVITY = 150; // px/s²
 
 // ─── Wall Marks (scorch marks) ────────────────────────────────────────────
 export const WALL_MARK_FADE_MS   = 10000; // 10s fade time

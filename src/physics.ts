@@ -1,7 +1,7 @@
 // PhysicsEngine — pure functions: ball movement, collision, spin, reflection
 
 import {
-  Ball, Paddle, ScreenShake, ImpactRing, WallMark, GameState
+  Ball, Paddle, ScreenShake, ImpactRing, WallMark, GoalFlash, GoalParticle
 } from './types.js';
 import {
   CANVAS_WIDTH, CANVAS_HEIGHT,
@@ -17,6 +17,8 @@ import {
   EMOTION_JUMP_PX, EMOTION_SAG_PX, EMOTION_SPRING_K, EMOTION_SPRING_DAMP,
   WALL_MARK_FADE_MS,
   SERVE_ANGLE_RANGE,
+  HIT_EYE_FLASH_MS,
+  GOAL_FLASH_MS, GOAL_PARTICLE_MS, GOAL_PARTICLE_COUNT, GOAL_PARTICLE_GRAVITY,
   COLOR_P1, COLOR_P2,
 } from './constants.js';
 
@@ -28,6 +30,8 @@ export function resetBall(ball: Ball, towardLeft: boolean): void {
   ball.y = CANVAS_HEIGHT / 2;
   ball.spin = 0;
   ball.spinAngle = 0;
+  ball.hitFlashTimer = 0;
+  ball.sadTimer = 0;
   ball.speed = 300; // reset to base speed — new constants.ts BALL_BASE_SPEED
 
   const angleDeg = (Math.random() - 0.5) * 2 * SERVE_ANGLE_RANGE;
@@ -208,6 +212,9 @@ function resolvePaddleHit(ball: Ball, paddle: Paddle, fromRight: boolean): void 
   // Chromatic flash
   paddle.chromaticTimer = CHROMATIC_MS;
 
+  // Eye wide reaction
+  ball.hitFlashTimer = HIT_EYE_FLASH_MS;
+
   // Store edge factor on ball for audio (read by game.ts)
   (ball as Ball & { _edgeFactor?: number })._edgeFactor = edgeFactor;
 }
@@ -215,8 +222,10 @@ function resolvePaddleHit(ball: Ball, paddle: Paddle, fromRight: boolean): void 
 // ─── Spring / Animation Updates ────────────────────────────────────────────
 
 function updateTimers(ball: Ball, deltaMs: number): void {
-  if (ball.squashTimer > 0)  ball.squashTimer  = Math.max(0, ball.squashTimer  - deltaMs);
-  if (ball.stretchTimer > 0) ball.stretchTimer = Math.max(0, ball.stretchTimer - deltaMs);
+  if (ball.squashTimer > 0)    ball.squashTimer    = Math.max(0, ball.squashTimer    - deltaMs);
+  if (ball.stretchTimer > 0)   ball.stretchTimer   = Math.max(0, ball.stretchTimer   - deltaMs);
+  if (ball.hitFlashTimer > 0)  ball.hitFlashTimer  = Math.max(0, ball.hitFlashTimer  - deltaMs);
+  if (ball.sadTimer > 0)       ball.sadTimer       = Math.max(0, ball.sadTimer       - deltaMs);
 }
 
 /** Update paddle spring animations (recoil + emotion). Call each frame. */
@@ -315,4 +324,56 @@ export function getShakeOffset(shake: ScreenShake): [number, number] {
     (Math.random() - 0.5) * 2 * magnitude,
     (Math.random() - 0.5) * 2 * magnitude,
   ];
+}
+
+// ─── Goal Effects ───────────────────────────────────────────────────────────
+
+export function spawnGoalFlash(flashes: GoalFlash[], side: 1 | 2): void {
+  flashes.push({ side, age: 0 });
+}
+
+export function updateGoalFlashes(flashes: GoalFlash[], deltaMs: number): void {
+  for (let i = flashes.length - 1; i >= 0; i--) {
+    flashes[i].age += deltaMs;
+    if (flashes[i].age >= GOAL_FLASH_MS) flashes.splice(i, 1);
+  }
+}
+
+/**
+ * Spawn particles at the goal line. fanAngle is the direction they burst toward:
+ * π = fan left (P1 scored, ball exited right wall), 0 = fan right (P2 scored).
+ */
+export function spawnGoalParticles(
+  particles: GoalParticle[],
+  goalX: number,
+  ballY: number,
+  color: string,
+  fanAngle: number
+): void {
+  const halfFan = (60 * Math.PI) / 180; // ±60° = 120° fan
+  for (let i = 0; i < GOAL_PARTICLE_COUNT; i++) {
+    const angle = fanAngle + (Math.random() - 0.5) * 2 * halfFan;
+    const speed = 120 + Math.random() * 240; // 120–360 px/s (≈ 2–6 px/frame @60fps)
+    particles.push({
+      x: goalX,
+      y: ballY,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      size: 2 + Math.random() * 3,
+      age: 0,
+      color,
+    });
+  }
+}
+
+export function updateGoalParticles(particles: GoalParticle[], deltaMs: number): void {
+  const dt = deltaMs / 1000;
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.vy += GOAL_PARTICLE_GRAVITY * dt;
+    p.x  += p.vx * dt;
+    p.y  += p.vy * dt;
+    p.age += deltaMs;
+    if (p.age >= GOAL_PARTICLE_MS) particles.splice(i, 1);
+  }
 }
