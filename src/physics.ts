@@ -27,6 +27,7 @@ export function resetBall(ball: Ball, towardLeft: boolean): void {
   ball.x = CANVAS_WIDTH / 2;
   ball.y = CANVAS_HEIGHT / 2;
   ball.spin = 0;
+  ball.spinAngle = 0;
   ball.speed = 300; // reset to base speed — new constants.ts BALL_BASE_SPEED
 
   const angleDeg = (Math.random() - 0.5) * 2 * SERVE_ANGLE_RANGE;
@@ -79,6 +80,10 @@ export function updateBall(
   // ── Spin curve ────────────────────────────────────────────────────────
   ball.vy += ball.spin * SPIN_CURVE_FORCE * dt;
   ball.spin *= Math.exp(-SPIN_DECAY_PER_S * dt);
+
+  // Accumulate visual spin angle (drives rotation of spin indicator lines)
+  // Rate proportional to spin magnitude so it visibly slows as spin decays
+  ball.spinAngle += ball.spin * 40 * dt;
 
   // ── Move ──────────────────────────────────────────────────────────────
   ball.x += ball.vx * dt;

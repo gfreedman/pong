@@ -60,8 +60,6 @@ export class Renderer {
     this.drawImpactRings(state.impactRings);
 
     ctx.restore();
-
-    this.drawToyHints(state.player1);
   }
 
   // ─── Background ─────────────────────────────────────────────────────────
@@ -210,35 +208,106 @@ export class Renderer {
     ctx.fill();
     ctx.restore();
 
+    // Eye + Mouth — both in world space, no rotation, x mirrors with vx sign.
+    ctx.save();
+    ctx.translate(ball.x, ball.y);
+    this.drawBallEye(ball);
+    this.drawBallMouth(ball);
+    ctx.restore();
+
     // Spin indicator lines (subtle rotation marks)
     if (Math.abs(ball.spin) > 0.02) {
       this.drawSpinLines(ball, angle);
     }
   }
 
-  private drawSpinLines(ball: Ball, angle: number): void {
+  // Eye — drawn in world space (origin = ball centre, NO rotation).
+  // Always sits in the upper half; x-position mirrors with horizontal direction.
+  private drawBallEye(ball: Ball): void {
     const { ctx } = this;
-    const spinIntensity = Math.min(Math.abs(ball.spin) / 0.15, 1);
-    const numLines = 2;
-    const lineLen = ball.radius * 0.9;
+    const r       = ball.radius;
+    const speedT  = Math.max(0, Math.min((ball.speed - 280) / 440, 1));
+
+    // x flips with horizontal direction so the eye stays on the leading side
+    const dirX = ball.vx >= 0 ? 1 : -1;
+    const eyeX = r * 0.15 * dirX;
+    const eyeY = -r * 0.35;   // always above centre
+    const eyeR = r * 0.30;
 
     ctx.save();
-    ctx.globalAlpha = 0.5 * spinIntensity;
+    ctx.shadowBlur  = 0;
+    ctx.shadowColor = 'transparent';
+    ctx.lineCap     = 'round';
+
+    if (speedT > 0.65) {
+      // Happy squint: ∩ arc
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth   = eyeR * 0.90;
+      ctx.beginPath();
+      ctx.arc(eyeX, eyeY, eyeR * 0.75, Math.PI + 0.5, 2 * Math.PI - 0.5);
+      ctx.stroke();
+    } else {
+      // Normal filled eye
+      ctx.fillStyle = '#000000';
+      ctx.beginPath();
+      ctx.arc(eyeX, eyeY, eyeR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Specular highlight — ~20% of eye size at 10 o'clock (upper-left)
+      const hlR  = eyeR * 0.28;
+      const hlDx = eyeR * 0.38 * Math.cos(7 * Math.PI / 6);
+      const hlDy = eyeR * 0.38 * Math.sin(7 * Math.PI / 6);
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(eyeX + hlDx, eyeY + hlDy, hlR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  // Mouth — world space, no rotation. x mirrors with vx sign, always lower half.
+  // arc(cx, cy, r, 0, π, false) = clockwise right→bottom→left = ∪ smile, always.
+  private drawBallMouth(ball: Ball): void {
+    const { ctx } = this;
+    const r     = ball.radius;
+    const dirX   = ball.vx >= 0 ? 1 : -1;
+    const mouthX = r * 0.70 * dirX;  // pushed to forward edge of ball
+    const mouthY = r * 0.30;
+    const mouthR = r * 0.28;
+
+    ctx.save();
+    ctx.shadowBlur  = 0;
+    ctx.shadowColor = 'transparent';
+    ctx.strokeStyle = '#111111';
+    ctx.lineWidth   = 1.5;
+    ctx.lineCap     = 'round';
+    ctx.beginPath();
+    ctx.arc(mouthX, mouthY, mouthR, 0, Math.PI, false);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  private drawSpinLines(ball: Ball, angle: number): void {
+    const { ctx } = this;
+    // Normalize to [0,1] — full intensity at spin ~0.15
+    const spinIntensity = Math.min(Math.abs(ball.spin) / 0.15, 1);
+    const numLines = 3;
+    const innerR = ball.radius * 0.25;
+    const outerR = ball.radius * 0.95;
+
+    ctx.save();
+    ctx.globalAlpha = 0.65 * spinIntensity;
     ctx.strokeStyle = COLOR_BALL;
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1.5;
     ctx.translate(ball.x, ball.y);
 
     for (let i = 0; i < numLines; i++) {
-      const baseAngle = (i / numLines) * Math.PI + (Date.now() * 0.003 * Math.sign(ball.spin));
+      // spinAngle accumulates proportional to spin magnitude — slows as spin decays
+      const baseAngle = (i / numLines) * Math.PI * 2 + ball.spinAngle;
       ctx.beginPath();
-      ctx.moveTo(
-        Math.cos(baseAngle) * (ball.radius - lineLen),
-        Math.sin(baseAngle) * (ball.radius - lineLen)
-      );
-      ctx.lineTo(
-        Math.cos(baseAngle) * ball.radius,
-        Math.sin(baseAngle) * ball.radius
-      );
+      ctx.moveTo(Math.cos(baseAngle) * innerR, Math.sin(baseAngle) * innerR);
+      ctx.lineTo(Math.cos(baseAngle) * outerR, Math.sin(baseAngle) * outerR);
       ctx.stroke();
     }
     ctx.restore();
@@ -343,22 +412,6 @@ export class Renderer {
       ctx.fillText(`RALLY  ${state.rallyCount}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT - 16);
     }
 
-    ctx.restore();
-  }
-
-  // ─── Toy-mode control hints ─────────────────────────────────────────────
-
-  private drawToyHints(paddle: Paddle): void {
-    const { ctx } = this;
-    const x = paddle.x + paddle.width + 18;
-    const midY = paddle.y + paddle.height / 2;
-
-    ctx.save();
-    ctx.font = '13px "Courier New", monospace';
-    ctx.fillStyle = 'rgba(0, 240, 255, 0.55)';
-    ctx.textAlign = 'left';
-    ctx.fillText('W / ↑', x, midY - 10);
-    ctx.fillText('S / ↓', x, midY + 18);
     ctx.restore();
   }
 

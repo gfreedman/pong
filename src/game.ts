@@ -29,6 +29,7 @@ function makeBall(): Ball {
     vx: BALL_BASE_SPEED,
     vy: 0,
     spin: 0,
+    spinAngle: 0,
     radius: BALL_RADIUS,
     speed: BALL_BASE_SPEED,
     hitstopTimer: 0,

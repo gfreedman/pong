@@ -47,6 +47,9 @@ export interface Ball {
   squashTimer: number;
   stretchTimer: number;
 
+  // Spin visual accumulator — driven by spin magnitude, used to rotate spin lines
+  spinAngle: number;  // radians
+
   // Trail history (newest first)
   trail: TrailPoint[];
   trailTimer: number; // ms since last trail point captured

@@ -14,7 +14,7 @@ export const COLOR_COURT       = 'rgba(0, 240, 255, 0.18)';
 export const COLOR_SPARK       = '#ffe600';
 
 // ─── Ball (velocities in px/s) ────────────────────────────────────────────
-export const BALL_RADIUS         = 6;
+export const BALL_RADIUS         = 12;
 export const BALL_BASE_SPEED     = 300;   // px/s (≈ 5 px/frame @ 60fps)
 export const BALL_SPEED_INC      = 9;     // px/s added per paddle hit
 export const BALL_MAX_SPEED      = 720;   // px/s (≈ 12 px/frame)
@@ -43,9 +43,9 @@ export const BREATH_AMP_PX      = 0.5;   // height oscillation amplitude
 export const BREATH_FREQ_HZ     = 0.5;   // oscillation frequency
 
 // ─── Spin ──────────────────────────────────────────────────────────────────
-export const SPIN_IMPART_FACTOR  = 0.0028; // paddle vy (px/s) → spin units
+export const SPIN_IMPART_FACTOR  = 0.006;  // paddle vy (px/s) → spin units (easier induction)
 export const SPIN_CURVE_FORCE    = 90;     // vy change (px/s) per second per spin unit
-export const SPIN_DECAY_PER_S    = 0.35;   // exponential decay constant (per second)
+export const SPIN_DECAY_PER_S    = 0.22;   // exponential decay constant (per second — longer lasting)
 export const SPIN_WALL_RETAIN    = 0.55;   // fraction of spin kept after wall bounce
 
 // ─── Hit Feel ──────────────────────────────────────────────────────────────
