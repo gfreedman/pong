@@ -215,6 +215,23 @@ export class Renderer {
     ctx.fill();
     ctx.restore();
 
+    // Hit flash: orange tint fades out over hitFlashTimer duration
+    if (ball.hitFlashTimer > 0) {
+      const flashT = ball.hitFlashTimer / HIT_EYE_FLASH_MS;
+      ctx.save();
+      ctx.translate(ball.x, ball.y);
+      ctx.rotate(angle);
+      ctx.scale(scaleX, scaleY);
+      ctx.globalAlpha = flashT * 0.85;
+      ctx.fillStyle = COLOR_SPARK; // '#ffe600' yellow-orange
+      ctx.shadowColor = COLOR_SPARK;
+      ctx.shadowBlur = 18 * flashT;
+      ctx.beginPath();
+      ctx.arc(0, 0, ball.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
     // Eye + Mouth — both in world space, no rotation, x mirrors with vx sign.
     ctx.save();
     ctx.translate(ball.x, ball.y);
