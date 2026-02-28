@@ -788,40 +788,31 @@ body
 
 
 /* ══════════════════════════════════════════════════════════════
-   HOW TO PLAY — entry link on difficulty screen
+   HOW TO PLAY — btn-diff variant (neutral, below God Mode)
+   No data-diff attribute so it gets none of the per-difficulty
+   color rules. A soft white glow keeps it clearly distinct from
+   the three gameplay choices above.
    ══════════════════════════════════════════════════════════════ */
 
-.how-to-play-link
+.btn-diff--info
 {
-  font-family: inherit;
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  font-size: 0.72rem;
-  cursor: pointer;
-  letter-spacing: 0.06em;
-  opacity: 0.50;
-  padding: 0.3rem 0.6rem;
-  border-radius: 6px;
-  transition:
-    color   0.18s ease,
-    opacity 0.18s ease;
-
-  /* Appears after the controls hint so it doesn't compete on load. */
-  animation: slide-up-fade 0.5s ease 0.55s both;
+  /* Stagger this button slightly after God Mode (0.38s). */
+  animation-delay: 0.44s;
 }
 
-.how-to-play-link:hover
+.btn-diff--info:hover
 {
-  color: var(--p1);
-  opacity: 1;
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow:
+    0 0 18px rgba(255, 255, 255, 0.07),
+    inset 0 0 16px rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.04);
 }
 
-.how-to-play-link:focus-visible
+.btn-diff--info:focus-visible
 {
   outline: 2px solid var(--p1);
   outline-offset: 3px;
-  opacity: 1;
 }
 
 
