@@ -225,10 +225,15 @@ export class Renderer
     this.drawWallMarks(state.wallMarks);
 
     /* ── Court + walls ──────────────────────────────────────────────────
-       Court lines brighten linearly with rally intensity.               */
+       Court lines use the difficulty theme color and brighten with rally
+       intensity.                                                        */
     const courtIntensity = 1 + Math.min(rc / RALLY_TIER_LEGENDARY, 1) * 1.8;
-    this.drawCourt(courtIntensity);
-    this.drawWallBoundaries(courtIntensity);
+    const courtColor =
+      state.difficulty === 'HARD' ? COLOR_P2 :
+      state.difficulty === 'EASY' ? '#44ff88' :
+      COLOR_P1;
+    this.drawCourt(courtIntensity, courtColor);
+    this.drawWallBoundaries(courtIntensity, courtColor);
 
     /* ── Particles + power-up orbs ── */
     this.drawGoalParticles(state.goalParticles);
@@ -337,18 +342,19 @@ export class Renderer
    * @description Draws the dashed center line and center circle.
    *              Both brighten as intensity scales above 1 to signal rising tension.
    *
-   * @param intensity  1 = normal; higher = brighter lines and stronger glow.
+   * @param intensity    1 = normal; higher = brighter lines and stronger glow.
+   * @param courtColor   Hex color string — driven by the current difficulty.
    */
-  private drawCourt(intensity = 1): void
+  private drawCourt(intensity = 1, courtColor = COLOR_P1): void
   {
     const { ctx } = this;
     const alpha = Math.min(0.18 * intensity, 0.55);
-    const style = `rgba(0,240,255,${alpha.toFixed(3)})`;
 
     /* ── Dashed center line ── */
     ctx.save();
-    ctx.strokeStyle = style;
-    ctx.shadowColor = COLOR_P1;
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = courtColor;
+    ctx.shadowColor = courtColor;
     ctx.shadowBlur  = intensity > 1.5 ? (intensity - 1) * 16 : 0;
     ctx.lineWidth   = 2;
     ctx.setLineDash([12, 14]);
@@ -361,8 +367,9 @@ export class Renderer
 
     /* ── Center circle ── */
     ctx.save();
-    ctx.strokeStyle = style;
-    ctx.shadowColor = COLOR_P1;
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = courtColor;
+    ctx.shadowColor = courtColor;
     ctx.shadowBlur  = intensity > 1.5 ? (intensity - 1) * 10 : 0;
     ctx.lineWidth   = 1.5;
     ctx.beginPath();
@@ -1124,24 +1131,6 @@ export class Renderer
     const p1x = cx - 70;
     const p2x = cx + 70;
 
-    /* ── Difficulty badge ──────────────────────────────────────────────
-       Faint text below the P2 boost icons — just enough to be readable
-       but not distracting during gameplay.                             */
-    {
-      const diffColor =
-        state.difficulty === 'HARD' ? COLOR_P2 :
-        state.difficulty === 'EASY' ? '#44ff88' :
-        COLOR_P1;
-
-      ctx.save();
-      ctx.textAlign   = 'right';
-      ctx.font        = '11px system-ui, sans-serif';
-      ctx.fillStyle   = diffColor;
-      ctx.globalAlpha = 0.35;
-      ctx.fillText(state.difficulty, CANVAS_WIDTH - 10, 44);
-      ctx.restore();
-    }
-
     /* ── Score numbers ──────────────────────────────────────────────────
        score1Pop / score2Pop animate from 1.55 → 1.0 via exponential ease
        in tickScorePops(). The extra scale creates a satisfying "pop".   */
@@ -1643,8 +1632,9 @@ export class Renderer
    *              Brightness scales with rally intensity.
    *
    * @param courtIntensity  1 = normal; higher = brighter glow.
+   * @param courtColor      Hex color string — driven by the current difficulty.
    */
-  private drawWallBoundaries(courtIntensity = 1): void
+  private drawWallBoundaries(courtIntensity = 1, courtColor = COLOR_P1): void
   {
     const { ctx } = this;
     const thickness = 5;
@@ -1652,8 +1642,8 @@ export class Renderer
     const blur      = 8 + (courtIntensity - 1) * 6;
 
     ctx.save();
-    ctx.fillStyle   = COLOR_P1;
-    ctx.shadowColor = COLOR_P1;
+    ctx.fillStyle   = courtColor;
+    ctx.shadowColor = courtColor;
     ctx.shadowBlur  = blur;
     ctx.globalAlpha = alpha;
     ctx.fillRect(0, 0, CANVAS_WIDTH, thickness);                          // top wall
