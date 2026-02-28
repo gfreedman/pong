@@ -5,9 +5,11 @@
   "scripts": {
     "build": "esbuild src/main.ts --bundle --outfile=dist/script.js --target=es2020",
     "dev": "esbuild src/main.ts --bundle --outfile=dist/script.js --target=es2020 --watch",
-    "test": "node --test tests/pong.test.js"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
-    "esbuild": "^0.20.0"
+    "esbuild": "^0.20.0",
+    "vitest": "^2.0.0"
   }
 }
