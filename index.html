@@ -56,8 +56,152 @@
       </label>
 
       <p class="controls-hint">Enter to play</p>
+      <button class="how-to-play-link" id="how-to-play-btn">? How to Play</button>
     </div>
   </div>
+
+  <!-- ── How to Play modal (info-only, opened from difficulty screen) ───── -->
+  <div id="howtoplay-overlay" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="htp-title">
+    <div class="htp-modal">
+
+      <!-- Sticky header: title + close button -->
+      <div class="htp-header">
+        <h2 class="htp-title" id="htp-title">HOW TO PLAY</h2>
+        <button class="htp-close" id="htp-close" aria-label="Close">&times;</button>
+      </div>
+
+      <!-- Scrollable body -->
+      <div class="htp-body">
+
+        <!-- ── Controls ─────────────────────────────────────────── -->
+        <div class="htp-section">
+          <p class="htp-section-label">Controls</p>
+          <div class="htp-keys">
+            <div class="htp-key-row">
+              <span class="htp-key">W</span>
+              <span class="htp-key-desc">Move up</span>
+            </div>
+            <div class="htp-key-row">
+              <span class="htp-key">S</span>
+              <span class="htp-key-desc">Move down</span>
+            </div>
+          </div>
+          <p class="htp-p">You control the left paddle. First to 5 points wins the match.</p>
+          <p class="htp-p">Move your paddle while hitting to impart spin — the ball curves mid-flight in the direction you were moving.</p>
+        </div>
+
+        <!-- ── AI Difficulty ─────────────────────────────────────── -->
+        <div class="htp-section">
+          <p class="htp-section-label">AI Difficulty</p>
+          <div class="htp-diff-list">
+
+            <div class="htp-diff-row">
+              <span class="htp-diff-dot htp-diff-dot--easy"></span>
+              <div class="htp-diff-body">
+                <p class="htp-diff-name htp-diff-name--easy">EASY</p>
+                <p class="htp-diff-desc">Chases where the ball is right now — no prediction. Slow reactions and wide aiming error mean it misses often.</p>
+              </div>
+            </div>
+
+            <div class="htp-diff-row">
+              <span class="htp-diff-dot htp-diff-dot--medium"></span>
+              <div class="htp-diff-body">
+                <p class="htp-diff-name htp-diff-name--medium">MEDIUM</p>
+                <p class="htp-diff-desc">Simulates wall bounces to predict where the ball will land. Spin can still fool it.</p>
+              </div>
+            </div>
+
+            <div class="htp-diff-row">
+              <span class="htp-diff-dot htp-diff-dot--hard"></span>
+              <div class="htp-diff-body">
+                <p class="htp-diff-name htp-diff-name--hard">HARD</p>
+                <p class="htp-diff-desc">Full spin-aware prediction with near-instant reactions. It accounts for every curve. Good luck.</p>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ── Rally Escalation ──────────────────────────────────── -->
+        <div class="htp-section">
+          <p class="htp-section-label">Rally Escalation</p>
+          <p class="htp-p">Keep the ball in play and the game reacts. Longer rallies unlock intensity tiers — effects and audio build to match the moment.</p>
+          <div class="htp-rally-list">
+            <div class="htp-rally-row">
+              <span class="htp-rally-hits">4+ hits</span>
+              <span class="htp-rally-badge htp-rally-badge--building">BUILDING</span>
+              <span class="htp-rally-desc">Bass drone begins</span>
+            </div>
+            <div class="htp-rally-row">
+              <span class="htp-rally-hits">8+ hits</span>
+              <span class="htp-rally-badge htp-rally-badge--intense">INTENSE</span>
+              <span class="htp-rally-desc">Court glows, subtle zoom</span>
+            </div>
+            <div class="htp-rally-row">
+              <span class="htp-rally-hits">13+ hits</span>
+              <span class="htp-rally-badge htp-rally-badge--dramatic">DRAMATIC</span>
+              <span class="htp-rally-desc">Speed lines, warm background</span>
+            </div>
+            <div class="htp-rally-row">
+              <span class="htp-rally-hits">20+ hits</span>
+              <span class="htp-rally-badge htp-rally-badge--legendary">LEGENDARY</span>
+              <span class="htp-rally-desc">Edge pulse · max intensity · bigger goal shake</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Power-Ups ─────────────────────────────────────────── -->
+        <div class="htp-section">
+          <p class="htp-section-label">Power-Ups</p>
+          <p class="htp-p">Orbs drift onto the court mid-rally. Hit one with the ball to collect it. Each boost lasts 8 seconds.</p>
+          <div class="htp-pu-list">
+
+            <div class="htp-pu-row">
+              <span class="htp-pu-swatch htp-pu-swatch--wide"></span>
+              <div class="htp-pu-body">
+                <p class="htp-pu-name">WIDE PADDLE</p>
+                <p class="htp-pu-desc">Your paddle grows 50% taller — easier to cover edge shots and wide angles.</p>
+              </div>
+            </div>
+
+            <div class="htp-pu-row">
+              <span class="htp-pu-swatch htp-pu-swatch--speed"></span>
+              <div class="htp-pu-body">
+                <p class="htp-pu-name">SPEED BOOTS</p>
+                <p class="htp-pu-desc">Paddle moves 40% faster. Chase down those impossible corners.</p>
+              </div>
+            </div>
+
+            <div class="htp-pu-row">
+              <span class="htp-pu-swatch htp-pu-swatch--sticky"></span>
+              <div class="htp-pu-body">
+                <p class="htp-pu-name">STICKY PADDLE</p>
+                <p class="htp-pu-desc">The ball clings to your paddle on contact for half a second. Reposition, then release to aim your shot precisely.</p>
+              </div>
+            </div>
+
+            <div class="htp-pu-row">
+              <span class="htp-pu-swatch htp-pu-swatch--trail"></span>
+              <div class="htp-pu-body">
+                <p class="htp-pu-name">TRAIL BLAZER</p>
+                <p class="htp-pu-desc">Ball gains extra speed on every hit — and leaves a brighter trail. Turns long rallies into a blur.</p>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- ── God Mode ──────────────────────────────────────────── -->
+        <div class="htp-section">
+          <p class="htp-section-label">God Mode</p>
+          <p class="htp-p">Toggle before a match to activate all four power-ups permanently from the first serve. No orbs needed — pure, delightful chaos.</p>
+        </div>
+
+        <p class="htp-footer">Esc &nbsp;·&nbsp; &times; to close</p>
+
+      </div><!-- /.htp-body -->
+    </div><!-- /.htp-modal -->
+  </div><!-- /#howtoplay-overlay -->
 
   <!-- ── Pause button (top-right corner, visible during gameplay) ─────────── -->
   <button id="pause-btn" class="pause-btn hidden" aria-label="Settings / Pause">

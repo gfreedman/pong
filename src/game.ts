@@ -267,6 +267,7 @@ export class Game
   private endOverlay!:        HTMLElement;
   private pauseOverlay!:      HTMLElement;
   private pauseBtn!:          HTMLElement;
+  private howToPlayOverlay!:  HTMLElement;
 
   /* ── Pause state ─────────────────────────────────────────────────────── */
 
@@ -325,6 +326,7 @@ export class Game
     this.endOverlay        = document.getElementById('end-overlay')!;
     this.pauseOverlay      = document.getElementById('pause-overlay')!;
     this.pauseBtn          = document.getElementById('pause-btn')!;
+    this.howToPlayOverlay  = document.getElementById('howtoplay-overlay')!;
 
     /* Pause button (top-right corner during gameplay). */
     this.pauseBtn.addEventListener('click', () => this.pauseGame());
@@ -669,6 +671,47 @@ export class Game
         this.handleEndConfirm();
       });
     });
+
+    /* ── How To Play modal ── */
+    const howToPlayBtn   = document.getElementById('how-to-play-btn')!;
+    const howToPlayClose = document.getElementById('htp-close')!;
+
+    /** Open the How To Play modal and shift focus into it. */
+    const openHowToPlay = (): void =>
+    {
+      this.howToPlayOverlay.classList.add('active');
+      this.howToPlayOverlay.setAttribute('aria-hidden', 'false');
+      /* Move focus to the close button so keyboard users can dismiss immediately. */
+      howToPlayClose.focus();
+    };
+
+    /** Close the How To Play modal. */
+    const closeHowToPlay = (): void =>
+    {
+      this.howToPlayOverlay.classList.remove('active');
+      this.howToPlayOverlay.setAttribute('aria-hidden', 'true');
+      /* Return focus to the link that opened the modal. */
+      howToPlayBtn.focus();
+    };
+
+    howToPlayBtn.addEventListener('click', openHowToPlay);
+    howToPlayClose.addEventListener('click', closeHowToPlay);
+
+    /* Click on the backdrop (not the card) also closes the modal. */
+    this.howToPlayOverlay.addEventListener('click', (e) =>
+    {
+      if (e.target === this.howToPlayOverlay) closeHowToPlay();
+    });
+
+    /* Escape closes the modal when it is open (before the game loop consumes it). */
+    window.addEventListener('keydown', (e) =>
+    {
+      if (e.key === 'Escape' && this.howToPlayOverlay.classList.contains('active'))
+      {
+        e.stopPropagation(); // prevent the game-loop pause handler from firing too
+        closeHowToPlay();
+      }
+    }, { capture: true });
 
     /* ── Pause-modal buttons ── */
     this.pauseOverlay.querySelectorAll<HTMLElement>('.btn-pause').forEach(btn =>
