@@ -67,10 +67,10 @@ body
 #game-canvas
 {
   display: block;
-  max-width: 100vw;
-  max-height: 100vh;
-  aspect-ratio: 16 / 9;
-  /* No pixelated rendering — DPR scaling gives us sharp native pixels */
+  /* Sizing is controlled entirely by main.ts resize().
+     max-width/max-height/aspect-ratio are intentionally omitted —
+     those CSS constraints override the JS inline styles and cause
+     black pillars on non-16:9 viewports. */
 }
 
 
