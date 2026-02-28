@@ -53,8 +53,13 @@ function main(): void
     let w = vw;
     let h = vw / ratio;
 
-    /* If that height overflows the viewport, constrain by height instead */
-    if (h > vh)
+    /* Only switch to height-constrained mode if the overflow is significant
+       (> 15 % of the viewport height).  On standard 16:9 monitors the browser
+       chrome (tabs, address bar) reduces innerHeight enough that a strict
+       equality check would leave large black pillars on each side.  A 15 %
+       slack absorbs up to ~150 px of chrome on a 1080 p screen while body's
+       overflow:hidden safely clips the tiny vertical excess.               */
+    if (h > vh * 1.15)
     {
       h = vh;
       w = vh * ratio;
