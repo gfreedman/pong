@@ -46,27 +46,16 @@ function main(): void
   function resize(): void
   {
     const vw    = window.innerWidth;
-    const vh    = window.innerHeight;
     const ratio = 960 / 540;   // 16 ÷ 9 ≈ 1.778
 
-    /* Start by filling the full viewport width */
-    let w = vw;
-    let h = vw / ratio;
-
-    /* Only switch to height-constrained mode if the overflow is significant
-       (> 15 % of the viewport height).  On standard 16:9 monitors the browser
-       chrome (tabs, address bar) reduces innerHeight enough that a strict
-       equality check would leave large black pillars on each side.  A 15 %
-       slack absorbs up to ~150 px of chrome on a 1080 p screen while body's
-       overflow:hidden safely clips the tiny vertical excess.               */
-    if (h > vh * 1.15)
-    {
-      h = vh;
-      w = vh * ratio;
-    }
-
-    canvas!.style.width  = `${w}px`;
-    canvas!.style.height = `${h}px`;
+    /* Always fill the full viewport width.  The canvas height follows the
+       16:9 ratio and may exceed window.innerHeight on short viewports (e.g.
+       a 16:9 monitor with browser chrome).  body { overflow: hidden } clips
+       the excess vertically so no scrollbars or layout shift occur.
+       This guarantees zero black pillars on the left or right, on every
+       screen and browser configuration.                                    */
+    canvas!.style.width  = `${vw}px`;
+    canvas!.style.height = `${(vw / ratio).toFixed(1)}px`;
   }
 
   /* Apply sizing immediately, then re-apply whenever the window changes */
