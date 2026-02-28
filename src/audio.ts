@@ -50,31 +50,33 @@ export class AudioManager {
   ): void {
     if (this.muted) return;
     const ctx = this.getCtx();
-    const now = ctx.currentTime;
 
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
 
     osc.type = type;
-    osc.frequency.setValueAtTime(freq, now);
+    osc.frequency.value = freq;
     if (freqEnd !== undefined) {
-      osc.frequency.linearRampToValueAtTime(freqEnd, now + duration);
+      osc.frequency.linearRampToValueAtTime(freqEnd, ctx.currentTime + duration);
     }
 
-    gain.gain.setValueAtTime(gainVal, now);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    // Use .value (NOT setValueAtTime) — sets the intrinsic value that
+    // exponentialRampToValueAtTime reads as its start point.
+    // setValueAtTime collapses the ramp to silence if the rendering
+    // quantum has already ticked past currentTime.
+    gain.gain.value = gainVal;
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
 
     osc.connect(gain);
     gain.connect(this.masterGain);
 
-    osc.start(now);
-    osc.stop(now + duration + 0.01);
+    osc.start();
+    osc.stop(ctx.currentTime + duration + 0.01);
   }
 
   private noise(gainVal: number, duration: number): void {
     if (this.muted) return;
     const ctx = this.getCtx();
-    const now = ctx.currentTime;
     const bufLen = Math.ceil(ctx.sampleRate * duration);
     const buf = ctx.createBuffer(1, bufLen, ctx.sampleRate);
     const data = buf.getChannelData(0);
@@ -84,12 +86,12 @@ export class AudioManager {
     src.buffer = buf;
 
     const gain = ctx.createGain();
-    gain.gain.setValueAtTime(gainVal, now);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    gain.gain.value = gainVal;
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
 
     src.connect(gain);
     gain.connect(this.masterGain);
-    src.start(now);
+    src.start();
   }
 
   // ── Game sounds ────────────────────────────────────────────────────────
@@ -104,7 +106,6 @@ export class AudioManager {
   playPaddleHit(speed: number, edgeFactor = 0): void {
     if (this.muted || this.postGoalSilence > 0) return;
     const actx = this.getCtx();
-    const now = actx.currentTime;
 
     // Map speed → freq: 330 Hz (slow) to 660 Hz (fast)
     const t = Math.min(Math.max((speed - 300) / 420, 0), 1);
@@ -115,17 +116,17 @@ export class AudioManager {
     const gain = actx.createGain();
 
     osc.type = isEdge ? 'triangle' : 'sine';
-    osc.frequency.setValueAtTime(freq, now);
-    osc.frequency.linearRampToValueAtTime(freq + 100, now + 0.03); // pitch bend up
-    if (isEdge) osc.detune.setValueAtTime(30, now); // +30 cents softer detune
+    osc.frequency.value = freq;
+    osc.frequency.linearRampToValueAtTime(freq + 100, actx.currentTime + 0.03);
+    if (isEdge) osc.detune.value = 30;
 
-    gain.gain.setValueAtTime(0.3, now);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
+    gain.gain.value = 0.3;
+    gain.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + 0.08);
 
     osc.connect(gain);
     gain.connect(this.masterGain);
-    osc.start(now);
-    osc.stop(now + 0.09);
+    osc.start();
+    osc.stop(actx.currentTime + 0.09);
   }
 
   /** Lighter wall bounce — no hitstop, softer timbre */
@@ -141,32 +142,31 @@ export class AudioManager {
   playGoal(isLegendary = false): void {
     if (this.muted) return;
     const actx = this.getCtx();
-    const now = actx.currentTime;
 
     // Impact boom: 80 Hz sine, gain 0.4, exponential decay over 300ms
     const boom = actx.createOscillator();
     const boomGain = actx.createGain();
     boom.type = 'sine';
-    boom.frequency.setValueAtTime(80, now);
-    boomGain.gain.setValueAtTime(isLegendary ? 0.55 : 0.4, now);
-    boomGain.gain.exponentialRampToValueAtTime(0.0001, now + (isLegendary ? 0.45 : 0.3));
+    boom.frequency.value = 80;
+    boomGain.gain.value = isLegendary ? 0.55 : 0.4;
+    boomGain.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + (isLegendary ? 0.45 : 0.3));
     boom.connect(boomGain);
     boomGain.connect(this.masterGain);
-    boom.start(now);
-    boom.stop(now + 0.5);
+    boom.start();
+    boom.stop(actx.currentTime + 0.5);
 
     // Descending sweep: 500 Hz → 100 Hz over 400ms
     const sweep = actx.createOscillator();
     const sweepGain = actx.createGain();
     sweep.type = 'sine';
-    sweep.frequency.setValueAtTime(isLegendary ? 650 : 500, now);
-    sweep.frequency.linearRampToValueAtTime(100, now + 0.4);
-    sweepGain.gain.setValueAtTime(0.2, now);
-    sweepGain.gain.linearRampToValueAtTime(0, now + 0.4);
+    sweep.frequency.value = isLegendary ? 650 : 500;
+    sweep.frequency.linearRampToValueAtTime(100, actx.currentTime + 0.4);
+    sweepGain.gain.value = 0.2;
+    sweepGain.gain.linearRampToValueAtTime(0, actx.currentTime + 0.4);
     sweep.connect(sweepGain);
     sweepGain.connect(this.masterGain);
-    sweep.start(now);
-    sweep.stop(now + 0.41);
+    sweep.start();
+    sweep.stop(actx.currentTime + 0.41);
 
     // Silence: contrast between the boom and quiet is the drama
     // Legendary rallies earn a longer, more reverent pause
