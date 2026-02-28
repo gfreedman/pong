@@ -3,13 +3,99 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Neon Pong — neon-lit arcade Pong with spin physics, rally escalation, and a formidable AI.">
   <title>NEON PONG</title>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=2" />
 </head>
 <body>
+
+  <!-- Game canvas -->
   <div id="canvas-container">
-    <canvas id="game-canvas" width="960" height="540"></canvas>
+    <canvas id="game-canvas"></canvas>
   </div>
+
+  <!-- ── Difficulty Select overlay (opaque, covers canvas) ─────────────── -->
+  <div id="difficulty-overlay" aria-hidden="true">
+    <div class="overlay-screen">
+      <h1 class="game-title">NEON PONG</h1>
+      <p class="screen-subtitle">CHOOSE DIFFICULTY</p>
+
+      <div class="difficulty-card">
+        <button class="btn-diff" data-diff="0">
+          <span class="diff-emoji">🎮</span>
+          <span class="diff-text">
+            <span class="diff-label">EASY</span>
+            <span class="diff-desc">Slow reactions · Forgiving aim</span>
+          </span>
+        </button>
+        <button class="btn-diff" data-diff="1">
+          <span class="diff-emoji">🏓</span>
+          <span class="diff-text">
+            <span class="diff-label">MEDIUM</span>
+            <span class="diff-desc">Predicts your trajectory</span>
+          </span>
+        </button>
+        <button class="btn-diff" data-diff="2">
+          <span class="diff-emoji">⚡</span>
+          <span class="diff-text">
+            <span class="diff-label">HARD</span>
+            <span class="diff-desc">Reads spin · Merciless precision</span>
+          </span>
+        </button>
+      </div>
+
+      <label class="god-mode-toggle" id="god-mode-toggle">
+        <input type="checkbox" id="god-mode-checkbox">
+        <div class="god-mode-text">
+          <span class="god-mode-label">⚡ GOD MODE</span>
+          <span class="god-mode-desc">All power-ups · always active</span>
+        </div>
+      </label>
+
+      <p class="controls-hint">Enter to play</p>
+    </div>
+  </div>
+
+  <!-- ── Pause button (top-right corner, visible during gameplay) ─────────── -->
+  <button id="pause-btn" class="pause-btn hidden" aria-label="Settings / Pause">
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+         fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+    </svg>
+  </button>
+
+  <!-- ── Pause overlay ─────────────────────────────────────────────────────── -->
+  <div id="pause-overlay" aria-hidden="true">
+    <div class="pause-card">
+      <h2 class="pause-card__title">PAUSED</h2>
+      <div class="pause-buttons">
+        <button class="btn-pause btn-pause--primary" data-pause="0">Resume</button>
+        <button class="btn-pause btn-pause--secondary" data-pause="1">Restart Match</button>
+        <button class="btn-pause btn-pause--danger" data-pause="2">Quit to Menu</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── End Screen overlay (semi-transparent, floats over canvas) ──────── -->
+  <div id="end-overlay" aria-hidden="true">
+    <div class="end-card">
+      <h2 id="end-winner" class="end-winner"></h2>
+      <p id="end-score" class="end-score"></p>
+      <div id="end-stats" class="end-stats"></div>
+      <div class="end-buttons">
+        <button class="btn-end" data-end="0">Upgrade Shop</button>
+        <button class="btn-end" data-end="1">Rematch</button>
+        <button class="btn-end btn-ghost" data-end="2">Main Menu</button>
+      </div>
+      <p class="controls-hint">W / S to choose &nbsp;·&nbsp; Enter to confirm</p>
+    </div>
+  </div>
+
   <script src="dist/script.js"></script>
 </body>
 </html>

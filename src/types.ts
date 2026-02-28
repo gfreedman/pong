@@ -17,6 +17,23 @@ export type GameMode = 'QUICK_PLAY' | 'MATCH' | 'TIME_ATTACK' | 'SURVIVAL';
 export type Difficulty = 'EASY' | 'MEDIUM' | 'HARD';
 export type PlayerSide = 'LEFT' | 'RIGHT';
 
+export type PowerUpType = 'WIDE_PADDLE' | 'SPEED_BOOTS' | 'STICKY_PADDLE' | 'TRAIL_BLAZER';
+
+export interface PowerUp {
+  id: number;
+  type: PowerUpType;
+  x: number;
+  y: number;
+  age: number;        // ms since spawn
+  spinAngle: number;  // radians for letter rotation
+}
+
+export interface ActiveBoost {
+  type: PowerUpType;
+  owner: 1 | 2;
+  expiresAt: number;  // gameTime ms when this boost expires
+}
+
 export interface TrailPoint {
   x: number;
   y: number;
@@ -55,6 +72,12 @@ export interface Ball {
 
   // Spin visual accumulator — driven by spin magnitude, used to rotate spin lines
   spinAngle: number;  // radians
+
+  // Sticky power-up state
+  stickyHoldMs: number;        // > 0 while ball is pinned to a paddle
+  stickyOwner: 1 | 2 | null;  // which paddle is holding the ball
+  stickyVx: number;            // saved velocity to restore on release
+  stickyVy: number;
 
   // Trail history (newest first)
   trail: TrailPoint[];
@@ -118,9 +141,15 @@ export interface GameState {
   rallyCount: number;
   longestRally: number;
   isFirstLaunch: boolean;   // Nintendo first-launch experience flag
+  difficulty: Difficulty;
 
   // Phase 3 — rhythm
   materializeAlpha: number;  // 0 → 1: ball fades in during exhale phase
   score1Pop: number;         // > 1: score number scale bounce, eases back to 1
   score2Pop: number;
+
+  // Phase 5 — power-ups
+  powerUps: PowerUp[];
+  activeBoosts: ActiveBoost[];
+  lastHitPlayer: 1 | 2;
 }

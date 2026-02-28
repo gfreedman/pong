@@ -1,6 +1,6 @@
 // Renderer — all canvas drawing; pure output, no state mutation
 
-import { Ball, Paddle, ImpactRing, WallMark, GoalFlash, GoalParticle, GameState, GamePhase } from './types.js';
+import { Ball, Paddle, ImpactRing, WallMark, GoalFlash, GoalParticle, GameState, GamePhase, PowerUp, ActiveBoost, PowerUpType } from './types.js';
 import {
   CANVAS_WIDTH, CANVAS_HEIGHT,
   COLOR_BG, COLOR_P1, COLOR_P2, COLOR_BALL, COLOR_COURT, COLOR_SPARK, COLOR_HIT_FLASH,
@@ -17,6 +17,9 @@ import {
   MATCH_TARGET,
   RALLY_TIER_BUILDING, RALLY_TIER_INTENSE, RALLY_TIER_DRAMATIC, RALLY_TIER_LEGENDARY,
   ZOOM_INTENSE, ZOOM_DRAMATIC, ZOOM_LEGENDARY,
+  POWERUP_RADIUS, POWERUP_LIFETIME_MS, POWERUP_BOOST_MS, POWERUP_STICKY_HOLD_MS,
+  COLOR_POWERUP_WIDE, COLOR_POWERUP_SPEED, COLOR_POWERUP_STICKY, COLOR_POWERUP_TRAIL,
+  PADDLE_BASE_SPEED,
 } from './constants.js';
 
 /** How many trail points to display at a given rally count (trail grows with intensity). */
@@ -68,7 +71,7 @@ export class Renderer {
 
   // ─── Top-level draw ─────────────────────────────────────────────────────
 
-  draw(state: GameState, shakeX: number, shakeY: number): void {
+  draw(state: GameState, shakeX: number, shakeY: number, gameTime = 0, godMode = false): void {
     const { ctx } = this;
     const rc = state.rallyCount;
 
@@ -94,8 +97,19 @@ export class Renderer {
     const courtIntensity = 1 + Math.min(rc / RALLY_TIER_LEGENDARY, 1) * 1.8;
     this.drawCourt(courtIntensity);
 
+    // Wall boundaries — thick glowing lines at top and bottom
+    this.drawWallBoundaries(courtIntensity);
+
     this.drawGoalParticles(state.goalParticles);
-    this.drawBallTrail(state.ball, rc);
+    this.drawPowerUps(state.powerUps);
+    const trailBlazer = state.activeBoosts.some(b => b.type === 'TRAIL_BLAZER') || godMode;
+    this.drawBallTrail(state.ball, rc, trailBlazer);
+
+    // Compute active boost flags for paddle rendering
+    const p1SpeedBoost = godMode || state.activeBoosts.some(b => b.owner === 1 && b.type === 'SPEED_BOOTS');
+    const p2SpeedBoost = state.activeBoosts.some(b => b.owner === 2 && b.type === 'SPEED_BOOTS');
+    const p1WidePaddle = godMode || state.activeBoosts.some(b => b.owner === 1 && b.type === 'WIDE_PADDLE');
+    const p2WidePaddle = state.activeBoosts.some(b => b.owner === 2 && b.type === 'WIDE_PADDLE');
 
     // Ball — materialize fade-in during exhale, gentle pulse while serving
     const isMaterialize = state.materializeAlpha < 0.99;
@@ -118,8 +132,14 @@ export class Renderer {
       this.drawBall(state.ball);
     }
 
-    this.drawPaddle(state.player1);
-    this.drawPaddle(state.player2);
+    // Sticky paddle effect — pulsing rings on the paddle currently holding the ball
+    if (state.ball.stickyHoldMs > 0 && state.ball.stickyOwner !== null) {
+      const holdingPaddle = state.ball.stickyOwner === 1 ? state.player1 : state.player2;
+      this.drawStickyPaddleEffect(holdingPaddle, state.ball.stickyHoldMs);
+    }
+
+    this.drawPaddle(state.player1, p1SpeedBoost, p1WidePaddle);
+    this.drawPaddle(state.player2, p2SpeedBoost, p2WidePaddle);
     this.drawImpactRings(state.impactRings);
     this.drawGoalFlashes(state.goalFlashes);
 
@@ -131,7 +151,7 @@ export class Renderer {
     ctx.restore(); // shake
 
     // HUD drawn outside shake so it stays stable (still inside zoom)
-    this.drawHUD(state);
+    this.drawHUD(state, gameTime, godMode);
 
     ctx.restore(); // zoom
 
@@ -246,9 +266,11 @@ export class Renderer {
 
   // ─── Ball Trail ─────────────────────────────────────────────────────────
 
-  private drawBallTrail(ball: Ball, rallyCount = 0): void {
+  private drawBallTrail(ball: Ball, rallyCount = 0, trailBlazer = false): void {
     const { ctx } = this;
-    const displayLen = Math.min(ball.trail.length, trailDisplayCount(rallyCount));
+    const blazeMult = trailBlazer ? 2 : 1;
+    const rawLen = trailDisplayCount(rallyCount) * blazeMult;
+    const displayLen = Math.min(ball.trail.length, rawLen);
     if (displayLen === 0) return;
 
     // At high rallies the trail gets brighter and more saturated
@@ -256,7 +278,7 @@ export class Renderer {
       : rallyCount >= RALLY_TIER_DRAMATIC  ? 0.75
       : rallyCount >= RALLY_TIER_INTENSE   ? 0.5
       : 0;
-    const baseAlpha = 0.55 + intensity * 0.25;
+    const baseAlpha = (0.55 + intensity * 0.25) * (trailBlazer ? 1.4 : 1);
 
     for (let i = 0; i < displayLen; i++) {
       const pt = ball.trail[i];
@@ -358,6 +380,11 @@ export class Renderer {
     // Spin indicator lines (subtle rotation marks)
     if (Math.abs(ball.spin) > 0.02) {
       this.drawSpinLines(ball, angle);
+    }
+
+    // Sticky hold visual — magenta corona + depleting arc timer
+    if (ball.stickyHoldMs > 0) {
+      this.drawStickyBallEffect(ball);
     }
   }
 
@@ -504,7 +531,7 @@ export class Renderer {
 
   // ─── Paddle ─────────────────────────────────────────────────────────────
 
-  drawPaddle(paddle: Paddle): void {
+  drawPaddle(paddle: Paddle, speedBoost = false, widePaddle = false): void {
     const { ctx } = this;
     const baseColor = paddle.id === 1 ? COLOR_P1 : COLOR_P2;
 
@@ -561,6 +588,53 @@ export class Renderer {
     ctx.fillStyle = color;
     ctx.fillRect(px, pyAdj, pw, ph);
     ctx.restore();
+
+    // ── WIDE_PADDLE: glowing end-caps at the extended top and bottom edges ──
+    if (widePaddle) {
+      ctx.save();
+      ctx.strokeStyle = COLOR_POWERUP_WIDE;
+      ctx.shadowColor = COLOR_POWERUP_WIDE;
+      ctx.shadowBlur = 10;
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.75 + 0.25 * Math.sin(Date.now() * 0.004);
+      // Top cap
+      ctx.beginPath();
+      ctx.moveTo(px - 3, pyAdj);
+      ctx.lineTo(px + pw + 3, pyAdj);
+      ctx.stroke();
+      // Bottom cap
+      ctx.beginPath();
+      ctx.moveTo(px - 3, pyAdj + ph);
+      ctx.lineTo(px + pw + 3, pyAdj + ph);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // ── SPEED_BOOTS: vertical motion streaks shooting from the leading edge ──
+    if (speedBoost) {
+      const speedFrac = Math.min(Math.abs(paddle.vy) / (PADDLE_BASE_SPEED * 0.8), 1);
+      if (speedFrac > 0.15) {
+        const dir = paddle.vy > 0 ? 1 : -1;
+        // Streaks shoot FROM the leading edge (top if moving up, bottom if moving down)
+        const edgeY = dir > 0 ? pyAdj + ph : pyAdj;
+        ctx.save();
+        ctx.strokeStyle = COLOR_POWERUP_SPEED;
+        ctx.shadowColor = COLOR_POWERUP_SPEED;
+        ctx.shadowBlur = 8;
+        ctx.lineCap = 'round';
+        for (let i = 0; i < 4; i++) {
+          const xFrac = (i + 0.5) / 4;
+          const streakLen = speedFrac * 18 * (0.6 + 0.4 * Math.sin(Date.now() * 0.01 + i));
+          ctx.globalAlpha = speedFrac * (0.75 - i * 0.15);
+          ctx.lineWidth = 1.8 - i * 0.3;
+          ctx.beginPath();
+          ctx.moveTo(px + pw * xFrac, edgeY);
+          ctx.lineTo(px + pw * xFrac, edgeY + dir * streakLen);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
   }
 
   /** Linear RGB interpolation between two hex/rgb color strings. t=0 → c1, t=1 → c2. */
@@ -651,11 +725,25 @@ export class Renderer {
 
   // ─── HUD ────────────────────────────────────────────────────────────────
 
-  private drawHUD(state: GameState): void {
+  private drawHUD(state: GameState, gameTime = 0, godMode = false): void {
     const { ctx } = this;
     const cx = CANVAS_WIDTH / 2;
     const p1x = cx - 70;
     const p2x = cx + 70;
+
+    // Subtle difficulty badge — below P2 boost icon area
+    {
+      const diffColor = state.difficulty === 'HARD' ? COLOR_P2
+        : state.difficulty === 'EASY' ? '#44ff88'
+        : COLOR_P1;
+      ctx.save();
+      ctx.textAlign = 'right';
+      ctx.font = '11px system-ui, sans-serif';
+      ctx.fillStyle = diffColor;
+      ctx.globalAlpha = 0.35;
+      ctx.fillText(state.difficulty, CANVAS_WIDTH - 10, 44);
+      ctx.restore();
+    }
 
     // Score numbers with pop scale animation
     const drawScore = (score: number, pop: number, x: number, y: number, color: string) => {
@@ -677,17 +765,8 @@ export class Renderer {
     this.drawMatchPips(p1x, state.score1, COLOR_P1);
     this.drawMatchPips(p2x, state.score2, COLOR_P2);
 
-    // Bottom center: rally counter OR serve hint depending on phase
-    if (state.phase === 'SERVE_PENDING') {
-      const pulse = (Math.sin(Date.now() * 0.004) + 1) / 2;
-      ctx.save();
-      ctx.textAlign = 'center';
-      ctx.font = '14px system-ui, sans-serif';
-      ctx.globalAlpha = 0.3 + pulse * 0.45;
-      ctx.fillStyle = '#aaaaff';
-      ctx.fillText('W / S  ·  ready to serve', cx, CANVAS_HEIGHT - 14);
-      ctx.restore();
-    } else {
+    // Bottom center: rally counter
+    {
       const label = getRallyLabel(state.rallyCount);
       if (label) {
         const heat = Math.min((state.rallyCount - 4) / 21, 1);
@@ -702,6 +781,11 @@ export class Renderer {
         ctx.fillText(label, cx, CANVAS_HEIGHT - 14);
         ctx.restore();
       }
+    }
+
+    // Active boost icons near each paddle (always drawn in god mode)
+    if (state.activeBoosts.length > 0 || godMode) {
+      this.drawActiveBoostHUD(state.activeBoosts, gameTime, godMode);
     }
   }
 
@@ -789,62 +873,6 @@ export class Renderer {
     this.drawCenteredMenu(title, options, selectedIndex);
   }
 
-  // ─── End screen ─────────────────────────────────────────────────────────
-
-  drawEndScreen(
-    winnerLabel: string,
-    score1: number,
-    score2: number,
-    longestRally: number,
-    sparksEarned: number,
-    selectedIndex: number
-  ): void {
-    const { ctx } = this;
-    this.drawBackground();
-
-    ctx.save();
-    ctx.textAlign = 'center';
-
-    // Winner
-    ctx.font = 'bold 46px "Courier New", monospace';
-    ctx.fillStyle = COLOR_P1;
-    ctx.shadowColor = COLOR_P1;
-    ctx.shadowBlur = 24;
-    ctx.fillText(winnerLabel, CANVAS_WIDTH / 2, 150);
-
-    // Score
-    ctx.font = '28px "Courier New", monospace';
-    ctx.fillStyle = '#ffffff';
-    ctx.shadowBlur = 0;
-    ctx.fillText(`${score1}  —  ${score2}`, CANVAS_WIDTH / 2, 210);
-
-    // Stats
-    ctx.font = '18px "Courier New", monospace';
-    ctx.fillStyle = 'rgba(200,200,255,0.7)';
-    ctx.fillText(`Longest Rally: ${longestRally}`, CANVAS_WIDTH / 2, 260);
-    ctx.fillStyle = COLOR_SPARK;
-    ctx.shadowColor = COLOR_SPARK;
-    ctx.shadowBlur = 8;
-    ctx.fillText(`⚡ +${sparksEarned}  Neon Sparks`, CANVAS_WIDTH / 2, 295);
-
-    ctx.restore();
-
-    const options = ['Upgrade Shop', 'Rematch', 'Main Menu'];
-    this.drawCenteredMenu('', options, selectedIndex, 340);
-  }
-
-  // ─── Pause overlay ──────────────────────────────────────────────────────
-
-  drawPauseOverlay(selectedIndex: number): void {
-    const { ctx } = this;
-    ctx.save();
-    ctx.fillStyle = 'rgba(5, 5, 30, 0.72)';
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-    ctx.restore();
-
-    this.drawCenteredMenu('PAUSED', ['Resume', 'Upgrade Shop', 'Quit to Menu'], selectedIndex);
-  }
-
   // ─── Countdown ──────────────────────────────────────────────────────────
 
   drawCountdown(text: string, ball: Ball): void {
@@ -873,6 +901,347 @@ export class Renderer {
     ctx.shadowBlur = 14;
     ctx.fillText('✧  SPIN  ✧', x, y - 22);
     ctx.restore();
+  }
+
+  // ─── Power-Up Orbs ───────────────────────────────────────────────────────
+
+  private powerUpColor(type: PowerUpType): string {
+    switch (type) {
+      case 'WIDE_PADDLE':   return COLOR_POWERUP_WIDE;
+      case 'SPEED_BOOTS':   return COLOR_POWERUP_SPEED;
+      case 'STICKY_PADDLE': return COLOR_POWERUP_STICKY;
+      case 'TRAIL_BLAZER':  return COLOR_POWERUP_TRAIL;
+    }
+  }
+
+  private powerUpLabel(type: PowerUpType): string {
+    switch (type) {
+      case 'WIDE_PADDLE':   return 'WIDE PADDLE';
+      case 'SPEED_BOOTS':   return 'SPEED BOOTS';
+      case 'STICKY_PADDLE': return 'STICKY';
+      case 'TRAIL_BLAZER':  return 'TRAIL BLAZER';
+    }
+  }
+
+  /**
+   * Draw a mini icon for a power-up type.
+   * Origin is the centre of the orb; drawn in white so it pops on the
+   * coloured fill. `r` is the usable icon radius (a fraction of POWERUP_RADIUS).
+   */
+  private drawPowerUpIcon(type: PowerUpType, r: number): void {
+    const { ctx } = this;
+    ctx.save();
+    ctx.fillStyle   = 'rgba(0,0,0,0.72)';
+    ctx.strokeStyle = 'rgba(0,0,0,0.72)';
+    ctx.lineWidth   = 1.8;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+    ctx.shadowBlur  = 0;
+
+    switch (type) {
+      case 'WIDE_PADDLE': {
+        // Tall thin paddle silhouette — bar top + bar bottom + spine
+        const w = r * 0.28;
+        const h = r * 0.92;
+        ctx.fillRect(-w / 2, -h / 2, w, h);
+        // Two bright horizontal tick marks at top and bottom
+        ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(-w * 1.6, -h / 2);
+        ctx.lineTo( w * 1.6, -h / 2);
+        ctx.moveTo(-w * 1.6,  h / 2);
+        ctx.lineTo( w * 1.6,  h / 2);
+        ctx.stroke();
+        break;
+      }
+
+      case 'SPEED_BOOTS': {
+        // Lightning bolt ⚡ polygon
+        const pts: [number, number][] = [
+          [-0.15 * r, -0.90 * r],
+          [ 0.35 * r, -0.10 * r],
+          [ 0.05 * r, -0.10 * r],
+          [ 0.15 * r,  0.90 * r],
+          [-0.35 * r,  0.10 * r],
+          [-0.05 * r,  0.10 * r],
+        ];
+        ctx.beginPath();
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+        ctx.closePath();
+        ctx.fill();
+        break;
+      }
+
+      case 'STICKY_PADDLE': {
+        // Bullseye — filled inner disc + outer ring
+        const inner = r * 0.30;
+        const outer = r * 0.72;
+        ctx.beginPath();
+        ctx.arc(0, 0, inner, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(0, 0, outer, 0, Math.PI * 2);
+        ctx.lineWidth = r * 0.20;
+        ctx.stroke();
+        break;
+      }
+
+      case 'TRAIL_BLAZER': {
+        // Comet — small circle + three fading lines trailing to the left
+        const cr = r * 0.28;
+        ctx.beginPath();
+        ctx.arc(r * 0.20, 0, cr, 0, Math.PI * 2);
+        ctx.fill();
+        // Three tail lines spreading leftward
+        const tailLengths = [r * 0.70, r * 0.55, r * 0.40];
+        const offsets     = [0, r * 0.22, -r * 0.22];
+        for (let i = 0; i < 3; i++) {
+          ctx.globalAlpha = (i === 0 ? 0.72 : 0.40);
+          ctx.beginPath();
+          ctx.moveTo(r * 0.05, offsets[i]);
+          ctx.lineTo(r * 0.05 - tailLengths[i], offsets[i]);
+          ctx.stroke();
+        }
+        break;
+      }
+    }
+    ctx.restore();
+  }
+
+  private drawPowerUps(powerUps: PowerUp[]): void {
+    const { ctx } = this;
+    for (const pu of powerUps) {
+      const color = this.powerUpColor(pu.type);
+
+      // Fade-in over first 400ms
+      const fadeIn = Math.min(1, pu.age / 400);
+
+      // Warning flash in last 25% of lifetime
+      let alpha = fadeIn;
+      if (pu.age > POWERUP_LIFETIME_MS * 0.75) {
+        alpha = fadeIn * (0.35 + 0.65 * Math.abs(Math.sin(pu.age * 0.015)));
+      }
+
+      // Outer pulsing glow ring
+      const pulse = 0.7 + 0.3 * Math.sin(pu.age * 0.004);
+      ctx.save();
+      ctx.globalAlpha = alpha * 0.45 * pulse;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 18 * pulse;
+      ctx.beginPath();
+      ctx.arc(pu.x, pu.y, POWERUP_RADIUS + 9, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+
+      // Filled orb body
+      ctx.save();
+      ctx.globalAlpha = alpha * 0.88;
+      ctx.fillStyle = color;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 20;
+      ctx.beginPath();
+      ctx.arc(pu.x, pu.y, POWERUP_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Mini icon — drawn in orb-space, rotates gently with spinAngle
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(pu.x, pu.y);
+      ctx.rotate(pu.spinAngle);
+      this.drawPowerUpIcon(pu.type, POWERUP_RADIUS * 0.68);
+      ctx.restore();
+
+      // Label beside the orb — left or right based on x position
+      const labelRight = pu.x < CANVAS_WIDTH / 2;
+      const labelX = labelRight
+        ? pu.x + POWERUP_RADIUS + 10
+        : pu.x - POWERUP_RADIUS - 10;
+      ctx.save();
+      ctx.globalAlpha = alpha * 0.92;
+      ctx.font = 'bold 10px system-ui, sans-serif';
+      ctx.fillStyle = color;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 8;
+      ctx.textAlign = labelRight ? 'left' : 'right';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(this.powerUpLabel(pu.type), labelX, pu.y);
+      ctx.restore();
+    }
+  }
+
+  // ─── Active Boost HUD ────────────────────────────────────────────────────
+
+  private drawActiveBoostHUD(boosts: ActiveBoost[], gameTime: number, godMode = false): void {
+    const { ctx } = this;
+
+    const ALL_TYPES: PowerUpType[] = ['WIDE_PADDLE', 'SPEED_BOOTS', 'STICKY_PADDLE', 'TRAIL_BLAZER'];
+
+    // God mode: P1 always shows all 4 at full bars
+    const p1Boosts: ActiveBoost[] = godMode
+      ? ALL_TYPES.map(t => ({ type: t, owner: 1 as const, expiresAt: Infinity }))
+      : boosts.filter(b => b.owner === 1 && b.expiresAt > gameTime);
+    const p2Boosts = boosts.filter(b => b.owner === 2 && b.expiresAt > gameTime);
+
+    // Horizontal row layout at the very top of the screen
+    const iconSide = 20;
+    const barH     = 2;
+    const iconGap  = 4;
+    const topY     = 7;  // distance from top edge
+
+    // P1 icons: left-aligned from x=8, expanding rightward
+    const drawRow = (playerBoosts: ActiveBoost[], rightAlign: boolean) => {
+      const totalW = playerBoosts.length * iconSide + Math.max(0, playerBoosts.length - 1) * iconGap;
+      const startX = rightAlign ? CANVAS_WIDTH - 8 - totalW : 8;
+
+      playerBoosts.forEach((boost, i) => {
+        const color     = this.powerUpColor(boost.type);
+        const remaining = Math.min(1, Math.max(0, (boost.expiresAt - gameTime) / POWERUP_BOOST_MS));
+        const x  = startX + i * (iconSide + iconGap);
+        const cy = topY + iconSide / 2;
+
+        ctx.save();
+
+        // Dark pill background
+        ctx.globalAlpha = 0.82;
+        ctx.fillStyle = 'rgba(0,0,0,0.60)';
+        ctx.beginPath();
+        ctx.roundRect(x, topY, iconSide, iconSide, 4);
+        ctx.fill();
+
+        // Coloured tint (scales with remaining)
+        ctx.fillStyle = color;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 5;
+        ctx.globalAlpha = 0.18 + remaining * 0.28;
+        ctx.beginPath();
+        ctx.roundRect(x, topY, iconSide, iconSide, 4);
+        ctx.fill();
+
+        // Mini icon
+        ctx.globalAlpha = 0.92;
+        ctx.shadowBlur = 0;
+        ctx.translate(x + iconSide / 2, cy);
+        this.drawPowerUpIcon(boost.type, iconSide * 0.33);
+        ctx.translate(-(x + iconSide / 2), -cy);
+
+        // Drain bar flush below icon
+        ctx.globalAlpha = 0.70;
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        ctx.fillRect(x, topY + iconSide + 1, iconSide, barH);
+        ctx.fillStyle = color;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 3;
+        ctx.globalAlpha = 0.85;
+        ctx.fillRect(x, topY + iconSide + 1, iconSide * remaining, barH);
+
+        ctx.restore();
+      });
+    };
+
+    drawRow(p1Boosts, false);
+    drawRow(p2Boosts, true);
+
+    // God mode badge — pulsing ⚡ GOD just to the right of P1 icons
+    if (godMode) {
+      const pulse = 0.72 + 0.28 * Math.sin(Date.now() * 0.005);
+      const badgeX = 8 + ALL_TYPES.length * (iconSide + iconGap) + 6;
+      ctx.save();
+      ctx.globalAlpha = pulse;
+      ctx.font = 'bold 9px system-ui, sans-serif';
+      ctx.fillStyle = '#ffe600';
+      ctx.shadowColor = '#ffe600';
+      ctx.shadowBlur = 10;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('⚡ GOD', badgeX, topY + iconSide / 2);
+      ctx.restore();
+    }
+  }
+
+  // ─── Wall Boundaries ─────────────────────────────────────────────────────
+
+  /** Thick glowing lines at top and bottom edges — shows the solid walls. */
+  private drawWallBoundaries(courtIntensity = 1): void {
+    const { ctx } = this;
+    const thickness = 5;
+    const alpha = Math.min(0.7 + (courtIntensity - 1) * 0.2, 0.95);
+    const blur  = 8 + (courtIntensity - 1) * 6;
+
+    ctx.save();
+    ctx.fillStyle = COLOR_P1;
+    ctx.shadowColor = COLOR_P1;
+    ctx.shadowBlur = blur;
+    ctx.globalAlpha = alpha;
+    ctx.fillRect(0, 0, CANVAS_WIDTH, thickness);                          // top wall
+    ctx.fillRect(0, CANVAS_HEIGHT - thickness, CANVAS_WIDTH, thickness);  // bottom wall
+    ctx.restore();
+  }
+
+  // ─── Sticky effects ──────────────────────────────────────────────────────
+
+  /** Pulsing magenta glow + depleting arc timer around the held ball. */
+  private drawStickyBallEffect(ball: Ball): void {
+    const { ctx } = this;
+    const progress = ball.stickyHoldMs / POWERUP_STICKY_HOLD_MS; // 1→0
+    const pulse    = 0.7 + 0.3 * Math.sin(Date.now() * 0.018);
+
+    // Pulsing magenta corona
+    ctx.save();
+    ctx.translate(ball.x, ball.y);
+    ctx.globalAlpha = 0.55 * pulse;
+    ctx.strokeStyle = COLOR_POWERUP_STICKY;
+    ctx.shadowColor = COLOR_POWERUP_STICKY;
+    ctx.shadowBlur  = 16;
+    ctx.lineWidth   = 2.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, ball.radius + 7, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+
+    // Depleting arc — full circle when just caught, shrinks to zero before release
+    const arcLen = progress * Math.PI * 2;
+    ctx.save();
+    ctx.translate(ball.x, ball.y);
+    ctx.globalAlpha = 0.90;
+    ctx.strokeStyle = COLOR_POWERUP_STICKY;
+    ctx.shadowColor = COLOR_POWERUP_STICKY;
+    ctx.shadowBlur  = 12;
+    ctx.lineWidth   = 3;
+    ctx.lineCap     = 'round';
+    ctx.beginPath();
+    ctx.arc(0, 0, ball.radius + 7, -Math.PI / 2, -Math.PI / 2 + arcLen);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /** Pulsing concentric rings on the paddle that's holding the ball. */
+  private drawStickyPaddleEffect(paddle: Paddle, stickyHoldMs: number): void {
+    const { ctx } = this;
+    const cx   = paddle.x + paddle.recoilOffset + paddle.width / 2;
+    const cy   = paddle.y + paddle.emotionOffset + paddle.height / 2;
+    const t    = Date.now() * 0.007;
+
+    for (let i = 0; i < 3; i++) {
+      const ringT = ((t + i * 0.8) % (Math.PI * 2)) / (Math.PI * 2);
+      const radius = 8 + ringT * 22;
+      const alpha  = (1 - ringT) * 0.55;
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle  = COLOR_POWERUP_STICKY;
+      ctx.shadowColor  = COLOR_POWERUP_STICKY;
+      ctx.shadowBlur   = 10;
+      ctx.lineWidth    = 1.5;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   // ─── Helpers ────────────────────────────────────────────────────────────

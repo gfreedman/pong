@@ -1,9 +1,9 @@
 // Game — state machine, game loop, orchestration
 
-import { Ball, Paddle, GameState, ImpactRing, WallMark, ScreenShake, GoalFlash, GoalParticle } from './types.js';
+import { Ball, Paddle, GameState, GamePhase, ImpactRing, WallMark, ScreenShake, GoalFlash, GoalParticle, Difficulty, PowerUp, PowerUpType, ActiveBoost } from './types.js';
 import {
   CANVAS_WIDTH, CANVAS_HEIGHT,
-  BALL_RADIUS, BALL_BASE_SPEED,
+  BALL_RADIUS, BALL_BASE_SPEED, BALL_MAX_SPEED,
   PADDLE_WIDTH, PADDLE_HEIGHT, PADDLE_BASE_SPEED, PADDLE_MARGIN,
   PADDLE_ACCEL, PADDLE_DECEL_FAST, PADDLE_DECEL_SLOW, PADDLE_DECEL_CURVE,
   COLOR_P1, COLOR_P2,
@@ -17,6 +17,10 @@ import {
   BALL_MATERIALIZE_MS,
   SERVE_PENDING_AI_MS,
   LEGENDARY_SHAKE_INTENSITY, LEGENDARY_SHAKE_MS,
+  POWERUP_SPAWN_MIN_MS, POWERUP_SPAWN_MAX_MS, POWERUP_LIFETIME_MS,
+  POWERUP_BOOST_MS, POWERUP_RADIUS, POWERUP_WIDE_FACTOR, POWERUP_SPEED_FACTOR,
+  POWERUP_STICKY_HOLD_MS, POWERUP_SPEED_ACCEL_FACTOR, POWERUP_TRAIL_SPEED_BONUS,
+  COLOR_POWERUP_WIDE, COLOR_POWERUP_SPEED, COLOR_POWERUP_STICKY, COLOR_POWERUP_TRAIL,
 } from './constants.js';
 import { InputManager } from './input.js';
 import { AudioManager } from './audio.js';
@@ -47,6 +51,10 @@ function makeBall(): Ball {
     stretchTimer: 0,
     hitFlashTimer: 0,
     sadTimer: 0,
+    stickyHoldMs: 0,
+    stickyOwner: null,
+    stickyVx: 0,
+    stickyVy: 0,
     trail: [],
     trailTimer: 0,
   };
@@ -85,6 +93,12 @@ export class Game {
   private lastTimestamp = 0;
   private rafId = 0;
 
+  // Power-up state
+  private powerUpTimer    = 0;
+  private powerUpInterval = 0;   // randomised each spawn cycle
+  private gameTime        = 0;   // ms accumulator — used for boost expiry
+  private powerUpIdCtr    = 0;
+
   // Spin discovery tracking
   private rallyHits = 0;
   private spinDiscoveryShown = false;
@@ -106,6 +120,23 @@ export class Game {
   // Rally drone tier management
   private currentDroneTier = 0;
 
+  // Difficulty select
+  private difficulty: Difficulty = 'MEDIUM';
+  private difficultyIndex = 1; // 0=Easy, 1=Medium, 2=Hard
+
+  // God Mode — P1 always has all power-ups
+  private godMode = false;
+
+  // HTML overlay DOM references
+  private difficultyOverlay!: HTMLElement;
+  private endOverlay!: HTMLElement;
+  private pauseOverlay!: HTMLElement;
+  private pauseBtn!: HTMLElement;
+
+  // Pause state
+  private prePausePhase: GamePhase = 'PLAYING';
+  private pauseIndex = 0;
+
   constructor(canvas: HTMLCanvasElement) {
     this.input = new InputManager();
     this.audio = new AudioManager();
@@ -113,7 +144,7 @@ export class Game {
     this.ai = new AIController();
 
     this.state = {
-      phase: 'POINT_SCORED',
+      phase: 'DIFFICULTY_SELECT',
       ball: makeBall(),
       player1: makePaddle(1),
       player2: makePaddle(2),
@@ -127,14 +158,28 @@ export class Game {
       rallyCount: 0,
       longestRally: 0,
       isFirstLaunch: true,
+      difficulty: 'MEDIUM',
       materializeAlpha: 0,
       score1Pop: 1,
       score2Pop: 1,
+      powerUps: [],
+      activeBoosts: [],
+      lastHitPlayer: 1,
     };
 
-    // First serve uses the full breath ritual
-    this.phaseTimer = EXHALE_BASE_MS;
-    this.servingToward = true;
+    this.difficultyOverlay = document.getElementById('difficulty-overlay')!;
+    this.endOverlay        = document.getElementById('end-overlay')!;
+    this.pauseOverlay      = document.getElementById('pause-overlay')!;
+    this.pauseBtn          = document.getElementById('pause-btn')!;
+    this.pauseBtn.addEventListener('click', () => this.pauseGame());
+
+    const godModeCheckbox = document.getElementById('god-mode-checkbox') as HTMLInputElement;
+    godModeCheckbox.addEventListener('change', () => {
+      this.godMode = godModeCheckbox.checked;
+    });
+
+    this.setupOverlayEvents();
+    this.showDifficultyOverlay();
   }
 
   start(): void {
@@ -164,11 +209,35 @@ export class Game {
   private update(deltaMs: number): void {
     const { state } = this;
 
+    // Escape pauses/unpauses from any in-game phase
+    if (this.input.pause()) {
+      if (state.phase === 'PAUSED') {
+        this.resumeGame();
+        return;
+      }
+      const pauseable: GamePhase[] = ['PLAYING', 'SERVE_PENDING', 'SERVING', 'POINT_SCORED'];
+      if (pauseable.includes(state.phase)) {
+        this.pauseGame();
+        return;
+      }
+    }
+
     switch (state.phase) {
+      case 'DIFFICULTY_SELECT':
+        this.tickDifficultySelect();
+        return; // skip global updates below while on menu
+
+      case 'PAUSED':
+        this.tickPaused();
+        break;
+
       case 'PLAYING':
+        this.gameTime += deltaMs;
         this.updatePaddleMovement(deltaMs);
         this.ai.update(state.player2, state.ball, deltaMs);
+        this.applyPaddleBoosts(deltaMs);
         this.updateAnimations(deltaMs);
+        this.tickPowerUps(deltaMs);
         this.updatePhysics(deltaMs);
         break;
 
@@ -264,20 +333,202 @@ export class Game {
     }
   }
 
+  private tickDifficultySelect(): void {
+    const DIFFS = 3;
+    if (this.input.menuUp()) {
+      this.difficultyIndex = (this.difficultyIndex - 1 + DIFFS) % DIFFS;
+      this.setDifficultySelection(this.difficultyIndex);
+      this.audio.playMenuNav();
+    }
+    if (this.input.menuDown()) {
+      this.difficultyIndex = (this.difficultyIndex + 1) % DIFFS;
+      this.setDifficultySelection(this.difficultyIndex);
+      this.audio.playMenuNav();
+    }
+    if (this.input.confirm()) {
+      this.confirmDifficulty();
+    }
+  }
+
   private tickMatchEnd(): void {
     const OPTIONS = 3;
     if (this.input.menuUp()) {
       this.endScreenIndex = (this.endScreenIndex - 1 + OPTIONS) % OPTIONS;
+      this.setEndSelection(this.endScreenIndex);
       this.audio.playMenuNav();
     }
     if (this.input.menuDown()) {
       this.endScreenIndex = (this.endScreenIndex + 1) % OPTIONS;
+      this.setEndSelection(this.endScreenIndex);
+      this.audio.playMenuNav();
+    }
+    if (this.input.confirm()) {
+      this.handleEndConfirm();
+    }
+  }
+
+  // ─── HTML Overlay management ────────────────────────────────────────────
+
+  private setupOverlayEvents(): void {
+    // Difficulty buttons — click selects and confirms
+    this.difficultyOverlay.querySelectorAll<HTMLElement>('.btn-diff').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.difficultyIndex = parseInt(btn.dataset.diff!);
+        this.confirmDifficulty();
+      });
+    });
+
+    // End screen buttons — click selects and confirms
+    this.endOverlay.querySelectorAll<HTMLElement>('.btn-end').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.endScreenIndex = parseInt(btn.dataset.end!);
+        this.handleEndConfirm();
+      });
+    });
+
+    // Pause modal buttons — click
+    this.pauseOverlay.querySelectorAll<HTMLElement>('.btn-pause').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.pause!);
+        this.audio.playMenuConfirm();
+        if (idx === 0) {
+          this.resumeGame();
+        } else if (idx === 1) {
+          // Restart match
+          this.pauseOverlay.classList.remove('active');
+          this.pauseOverlay.setAttribute('aria-hidden', 'true');
+          this.resetMatch();
+        } else {
+          // Quit to menu
+          this.pauseOverlay.classList.remove('active');
+          this.audio.setRallyDrone(0);
+          this.currentDroneTier = 0;
+          this.state.phase = 'DIFFICULTY_SELECT';
+          this.pauseBtn.classList.add('hidden');
+          this.showDifficultyOverlay();
+        }
+      });
+    });
+  }
+
+  private pauseGame(): void {
+    this.prePausePhase = this.state.phase;
+    this.state.phase = 'PAUSED';
+    this.pauseIndex = 0;
+    this.setPauseSelection(0);
+    this.pauseOverlay.classList.add('active');
+    this.pauseOverlay.setAttribute('aria-hidden', 'false');
+  }
+
+  private resumeGame(): void {
+    this.state.phase = this.prePausePhase;
+    this.pauseOverlay.classList.remove('active');
+    this.pauseOverlay.setAttribute('aria-hidden', 'true');
+  }
+
+  private tickPaused(): void {
+    const OPTIONS = 3;
+    if (this.input.menuUp()) {
+      this.pauseIndex = (this.pauseIndex - 1 + OPTIONS) % OPTIONS;
+      this.setPauseSelection(this.pauseIndex);
+      this.audio.playMenuNav();
+    }
+    if (this.input.menuDown()) {
+      this.pauseIndex = (this.pauseIndex + 1) % OPTIONS;
+      this.setPauseSelection(this.pauseIndex);
       this.audio.playMenuNav();
     }
     if (this.input.confirm()) {
       this.audio.playMenuConfirm();
+      if (this.pauseIndex === 0) {
+        this.resumeGame();
+      } else if (this.pauseIndex === 1) {
+        // Restart match
+        this.pauseOverlay.classList.remove('active');
+        this.pauseOverlay.setAttribute('aria-hidden', 'true');
+        this.resetMatch();
+      } else {
+        // Quit to menu
+        this.pauseOverlay.classList.remove('active');
+        this.audio.setRallyDrone(0);
+        this.currentDroneTier = 0;
+        this.state.phase = 'DIFFICULTY_SELECT';
+        this.pauseBtn.classList.add('hidden');
+        this.showDifficultyOverlay();
+      }
+    }
+  }
+
+  private setPauseSelection(index: number): void {
+    this.pauseOverlay.querySelectorAll('.btn-pause').forEach((btn, i) => {
+      btn.classList.toggle('selected', i === index);
+    });
+  }
+
+  private confirmDifficulty(): void {
+    const diffs: Difficulty[] = ['EASY', 'MEDIUM', 'HARD'];
+    this.difficulty = diffs[this.difficultyIndex];
+    this.ai.configure(this.difficulty);
+    this.audio.playMenuConfirm();
+    this.hideDifficultyOverlay();
+    this.startMatch();
+  }
+
+  private handleEndConfirm(): void {
+    this.audio.playMenuConfirm();
+    this.hideEndOverlay();
+    if (this.endScreenIndex === 2) {
+      // Main Menu
+      this.state.phase = 'DIFFICULTY_SELECT';
+      this.showDifficultyOverlay();
+    } else {
+      // Rematch or Upgrade Shop (placeholder → same as rematch)
       this.resetMatch();
     }
+  }
+
+  private showDifficultyOverlay(): void {
+    this.pauseBtn.classList.add('hidden');
+    this.setDifficultySelection(this.difficultyIndex);
+    this.difficultyOverlay.classList.add('active');
+    this.difficultyOverlay.setAttribute('aria-hidden', 'false');
+  }
+
+  private hideDifficultyOverlay(): void {
+    this.difficultyOverlay.classList.remove('active');
+    this.difficultyOverlay.setAttribute('aria-hidden', 'true');
+  }
+
+  private showEndOverlay(winner: string, score1: number, score2: number, longestRally: number, sparks: number): void {
+    this.pauseBtn.classList.add('hidden');
+    const winnerEl = document.getElementById('end-winner')!;
+    winnerEl.textContent = winner;
+    winnerEl.className = 'end-winner ' + (winner === 'PLAYER WINS!' ? 'player-wins' : 'ai-wins');
+    document.getElementById('end-score')!.textContent = `${score1}  —  ${score2}`;
+    document.getElementById('end-stats')!.innerHTML =
+      `<span>Longest Rally: ${longestRally} hits</span>` +
+      `<span class="end-stat-sparks">⚡ +${sparks} Neon Sparks</span>`;
+    this.endScreenIndex = 1;
+    this.setEndSelection(1);
+    this.endOverlay.classList.add('active');
+    this.endOverlay.setAttribute('aria-hidden', 'false');
+  }
+
+  private hideEndOverlay(): void {
+    this.endOverlay.classList.remove('active');
+    this.endOverlay.setAttribute('aria-hidden', 'true');
+  }
+
+  private setDifficultySelection(index: number): void {
+    this.difficultyOverlay.querySelectorAll('.btn-diff').forEach((btn, i) => {
+      btn.classList.toggle('selected', i === index);
+    });
+  }
+
+  private setEndSelection(index: number): void {
+    this.endOverlay.querySelectorAll('.btn-end').forEach((btn, i) => {
+      btn.classList.toggle('selected', i === index);
+    });
   }
 
   // ─── Score pop ─────────────────────────────────────────────────────────
@@ -330,13 +581,16 @@ export class Game {
 
     const p1Up   = input.p1Up();
     const p1Down = input.p1Down();
+    const speedBoost1   = this.hasBoost(1, 'SPEED_BOOTS');
+    const p1MaxSpeed    = PADDLE_BASE_SPEED * (speedBoost1 ? POWERUP_SPEED_FACTOR : 1);
+    const p1Accel       = PADDLE_ACCEL     * (speedBoost1 ? POWERUP_SPEED_ACCEL_FACTOR : 1);
 
     if (p1Up && !p1Down) {
-      p1.vy = Math.max(p1.vy - PADDLE_ACCEL, -PADDLE_BASE_SPEED);
+      p1.vy = Math.max(p1.vy - p1Accel, -p1MaxSpeed);
     } else if (p1Down && !p1Up) {
-      p1.vy = Math.min(p1.vy + PADDLE_ACCEL, PADDLE_BASE_SPEED);
+      p1.vy = Math.min(p1.vy + p1Accel, p1MaxSpeed);
     } else {
-      const speedNorm = Math.abs(p1.vy) / PADDLE_BASE_SPEED;
+      const speedNorm = Math.abs(p1.vy) / p1MaxSpeed;
       const t = Math.pow(speedNorm, PADDLE_DECEL_CURVE);
       p1.vy *= PADDLE_DECEL_SLOW + (PADDLE_DECEL_FAST - PADDLE_DECEL_SLOW) * t;
       if (Math.abs(p1.vy) < 1) p1.vy = 0;
@@ -356,6 +610,32 @@ export class Game {
   private updatePhysics(deltaMs: number): void {
     const { state } = this;
 
+    // ── Sticky ball — pin to paddle face while held ───────────────────────
+    if (state.ball.stickyHoldMs > 0) {
+      state.ball.stickyHoldMs = Math.max(0, state.ball.stickyHoldMs - deltaMs);
+      const ownerPaddle = state.ball.stickyOwner === 1 ? state.player1 : state.player2;
+      if (state.ball.stickyOwner === 1) {
+        state.ball.x = ownerPaddle.x + ownerPaddle.width + state.ball.radius;
+      } else {
+        state.ball.x = ownerPaddle.x - state.ball.radius;
+      }
+      state.ball.y = Math.max(
+        state.ball.radius,
+        Math.min(CANVAS_HEIGHT - state.ball.radius, ownerPaddle.y + ownerPaddle.height / 2)
+      );
+      if (state.ball.stickyHoldMs === 0) {
+        const wasOwner = state.ball.stickyOwner;
+        state.ball.vx = state.ball.stickyVx;
+        state.ball.vy = state.ball.stickyVy;
+        state.ball.stickyOwner = null;
+        // Extra spin kick on release — reward the player for holding
+        if (wasOwner !== null && this.hasBoost(wasOwner, 'STICKY_PADDLE')) {
+          state.ball.spin *= 1.8;
+        }
+      }
+      return;
+    }
+
     const result = updateBall(
       state.ball,
       state.player1,
@@ -368,6 +648,8 @@ export class Game {
     if (result.hitPaddle !== null) {
       const hitPaddle = result.hitPaddle === 1 ? state.player1 : state.player2;
       const color     = result.hitPaddle === 1 ? COLOR_P1 : COLOR_P2;
+
+      state.lastHitPlayer = result.hitPaddle;
 
       spawnImpactRing(state.impactRings, state.ball.x, state.ball.y, color);
       triggerShake(state.shake, SHAKE_HIT_INTENSITY, SHAKE_HIT_MS);
@@ -386,6 +668,46 @@ export class Game {
         this.spinDiscoveryShown = true;
         this.spinDiscoveryTimer = 1500;
         this.audio.playSpinDiscovery();
+      }
+
+      // Sticky power-up: hold ball for POWERUP_STICKY_HOLD_MS then release
+      if (this.hasBoost(result.hitPaddle, 'STICKY_PADDLE') && state.ball.stickyHoldMs === 0) {
+        state.ball.stickyVx = state.ball.vx;
+        state.ball.stickyVy = state.ball.vy;
+        state.ball.vx = 0;
+        state.ball.vy = 0;
+        state.ball.stickyHoldMs = POWERUP_STICKY_HOLD_MS;
+        state.ball.stickyOwner = result.hitPaddle;
+      }
+
+      // Trail Blazer: speed kick — ball gets faster on every hit while active
+      if (this.hasBoost(result.hitPaddle, 'TRAIL_BLAZER')) {
+        const mag = Math.sqrt(state.ball.vx ** 2 + state.ball.vy ** 2);
+        if (mag > 0) {
+          const newMag = Math.min(mag + POWERUP_TRAIL_SPEED_BONUS, BALL_MAX_SPEED * 1.1);
+          state.ball.vx = (state.ball.vx / mag) * newMag;
+          state.ball.vy = (state.ball.vy / mag) * newMag;
+          state.ball.speed = newMag;
+        }
+      }
+    }
+
+    // ── Power-up orb collection ────────────────────────────────────────
+    for (let i = state.powerUps.length - 1; i >= 0; i--) {
+      const pu = state.powerUps[i];
+      const dx = state.ball.x - pu.x;
+      const dy = state.ball.y - pu.y;
+      if (dx * dx + dy * dy < (BALL_RADIUS + POWERUP_RADIUS) ** 2) {
+        state.activeBoosts.push({
+          type: pu.type,
+          owner: state.lastHitPlayer,
+          expiresAt: this.gameTime + POWERUP_BOOST_MS,
+        });
+        const puColor = this.powerUpColor(pu.type);
+        spawnImpactRing(state.impactRings, pu.x, pu.y, puColor);
+        spawnImpactRing(state.impactRings, pu.x, pu.y, puColor); // double ring for emphasis
+        this.audio.playPowerUpCollect();
+        state.powerUps.splice(i, 1);
       }
     }
 
@@ -450,6 +772,8 @@ export class Game {
       state.ball.x = CANVAS_WIDTH / 2;
       state.ball.y = CANVAS_HEIGHT / 2;
       state.ball.trail = [];
+      state.ball.stickyHoldMs = 0;
+      state.ball.stickyOwner = null;
       state.materializeAlpha = 0;
 
       this.sparksEarned += SPARKS_PER_POINT;
@@ -457,8 +781,9 @@ export class Game {
       if (state.score1 >= MATCH_TARGET || state.score2 >= MATCH_TARGET) {
         this.sparksEarned += SPARKS_MATCH_WIN;
         state.phase = 'MATCH_END';
-        this.endScreenIndex = 1;
         this.audio.playMatchWin();
+        const winner = state.score1 >= MATCH_TARGET ? 'PLAYER WINS!' : 'AI WINS!';
+        this.showEndOverlay(winner, state.score1, state.score2, state.longestRally, this.sparksEarned);
       } else {
         state.phase = 'POINT_SCORED';
         this.phaseTimer = exhaleMs;
@@ -466,10 +791,16 @@ export class Game {
     }
   }
 
-  // ─── Match reset ────────────────────────────────────────────────────────
+  // ─── Match lifecycle ────────────────────────────────────────────────────────
 
-  private resetMatch(): void {
+  /** Begin a fresh match with the currently selected difficulty. */
+  private startMatch(): void {
     const { state } = this;
+
+    // Ensure overlays are hidden before gameplay begins
+    this.hideDifficultyOverlay();
+    this.hideEndOverlay();
+
     state.score1 = 0;
     state.score2 = 0;
     state.rallyCount = 0;
@@ -482,49 +813,122 @@ export class Game {
     state.player1 = makePaddle(1);
     state.player2 = makePaddle(2);
     state.shake = makeShake();
+    state.difficulty = this.difficulty;
     state.materializeAlpha = 0;
     state.score1Pop = 1;
     state.score2Pop = 1;
 
+    state.powerUps = [];
+    state.activeBoosts = [];
+    state.lastHitPlayer = 1;
+
     this.rallyHits = 0;
     this.sparksEarned = 0;
     this.currentDroneTier = 0;
-    this.audio.setRallyDrone(0);
-    this.ai.reset();
     this.servingToward = true;
+    this.gameTime = 0;
+    this.powerUpTimer = 0;
+    this.powerUpIdCtr = 0;
+    this.powerUpInterval = POWERUP_SPAWN_MIN_MS +
+      Math.random() * (POWERUP_SPAWN_MAX_MS - POWERUP_SPAWN_MIN_MS);
+    this.audio.setRallyDrone(0);
+
+    this.pauseBtn.classList.remove('hidden');
 
     state.phase = 'POINT_SCORED';
     this.phaseTimer = EXHALE_BASE_MS;
+  }
+
+  /** Rematch — keep the same difficulty and start a new match. */
+  private resetMatch(): void {
+    this.ai.reset();
+    this.startMatch();
+  }
+
+  // ─── Power-up helpers ────────────────────────────────────────────────────
+
+  private hasBoost(player: 1 | 2, type: PowerUpType): boolean {
+    if (this.godMode && player === 1) return true;
+    return this.state.activeBoosts.some(
+      b => b.owner === player && b.type === type && b.expiresAt > this.gameTime
+    );
+  }
+
+  private powerUpColor(type: PowerUpType): string {
+    switch (type) {
+      case 'WIDE_PADDLE':   return COLOR_POWERUP_WIDE;
+      case 'SPEED_BOOTS':   return COLOR_POWERUP_SPEED;
+      case 'STICKY_PADDLE': return COLOR_POWERUP_STICKY;
+      case 'TRAIL_BLAZER':  return COLOR_POWERUP_TRAIL;
+    }
+  }
+
+  /** Age orbs, expire boosts, rotate spin angles, spawn new orb on timer. */
+  private tickPowerUps(deltaMs: number): void {
+    const { state } = this;
+
+    // Age and rotate orbs; remove expired
+    for (const pu of state.powerUps) {
+      pu.age += deltaMs;
+      pu.spinAngle += 0.03;
+    }
+    state.powerUps = state.powerUps.filter(pu => pu.age < POWERUP_LIFETIME_MS);
+
+    // Remove expired boosts
+    state.activeBoosts = state.activeBoosts.filter(b => b.expiresAt > this.gameTime);
+
+    // Spawn timer — only one orb on court at a time
+    this.powerUpTimer += deltaMs;
+    if (this.powerUpTimer >= this.powerUpInterval && state.powerUps.length === 0) {
+      const types: PowerUpType[] = ['WIDE_PADDLE', 'SPEED_BOOTS', 'STICKY_PADDLE', 'TRAIL_BLAZER'];
+      const type = types[Math.floor(Math.random() * types.length)];
+      const x = 260 + Math.random() * (700 - 260);
+      const y = 80  + Math.random() * (460 - 80);
+      state.powerUps.push({ id: ++this.powerUpIdCtr, type, x, y, age: 0, spinAngle: 0 });
+      this.powerUpTimer = 0;
+      this.powerUpInterval = POWERUP_SPAWN_MIN_MS +
+        Math.random() * (POWERUP_SPAWN_MAX_MS - POWERUP_SPAWN_MIN_MS);
+    }
+  }
+
+  /** Apply WIDE_PADDLE height (spring-animated) and SPEED_BOOTS cap each frame. */
+  private applyPaddleBoosts(deltaMs: number): void {
+    const { state } = this;
+    // Lerp toward target height — creates a satisfying spring-like grow/shrink
+    const k = 1 - Math.exp(-14 * deltaMs / 1000);
+
+    const target1 = this.hasBoost(1, 'WIDE_PADDLE') ? PADDLE_HEIGHT * POWERUP_WIDE_FACTOR : PADDLE_HEIGHT;
+    state.player1.height += (target1 - state.player1.height) * k;
+
+    const target2 = this.hasBoost(2, 'WIDE_PADDLE') ? PADDLE_HEIGHT * POWERUP_WIDE_FACTOR : PADDLE_HEIGHT;
+    state.player2.height += (target2 - state.player2.height) * k;
+
+    // Cap AI velocity to boosted max speed (AI sets its own vy via AIController)
+    if (this.hasBoost(2, 'SPEED_BOOTS')) {
+      const maxSpeed = PADDLE_BASE_SPEED * POWERUP_SPEED_FACTOR;
+      state.player2.vy = Math.max(-maxSpeed, Math.min(maxSpeed, state.player2.vy));
+    }
   }
 
   // ─── Render ────────────────────────────────────────────────────────────
 
   private render(): void {
     const { state } = this;
-    const [shakeX, shakeY] = getShakeOffset(state.shake);
 
-    if (state.phase === 'MATCH_END') {
-      const winner = state.score1 >= MATCH_TARGET ? 'PLAYER WINS!' : 'AI WINS!';
-      this.renderer.drawEndScreen(
-        winner,
-        state.score1,
-        state.score2,
-        state.longestRally,
-        this.sparksEarned,
-        this.endScreenIndex
-      );
-      return;
-    }
+    // DIFFICULTY_SELECT: HTML overlay is showing — nothing to draw on canvas
+    if (state.phase === 'DIFFICULTY_SELECT') return;
 
-    // All in-play phases share the base scene
-    this.renderer.draw(state, shakeX, shakeY);
+    // MATCH_END: draw frozen game state; HTML end overlay sits on top
+    const [shakeX, shakeY] = state.phase === 'MATCH_END'
+      ? [0, 0]
+      : getShakeOffset(state.shake);
 
-    // Countdown overlay during the serve ritual
+    this.renderer.draw(state, shakeX, shakeY, this.gameTime, this.godMode);
+
     if (state.phase === 'SERVING') {
       this.renderer.drawCountdown(String(this.countdownStep), state.ball);
     }
 
-    // Spin discovery toast
     if (this.spinDiscoveryTimer > 0) {
       this.renderer.drawSpinDiscovery(
         state.ball.x, state.ball.y,

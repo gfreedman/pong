@@ -1,10 +1,46 @@
-*, *::before, *::after {
+/*
+ * ============================================================
+ *  Neon Pong — Stylesheet
+ * ============================================================
+ *  Color Key
+ *  ---------
+ *  P1  = cyan    (#00f0ff)
+ *  P2  = magenta (#ff00aa)
+ *  BG  = deep navy (#0a0a2e)
+ *  Easy  = green   (#44ff88)
+ * ============================================================
+ */
+
+/* ── Reset ─────────────────────────────────────────────────── */
+
+*,
+*::before,
+*::after
+{
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-html, body {
+/* ── Design tokens ──────────────────────────────────────────── */
+
+:root
+{
+  --bg:         #0a0a2e;
+  --p1:         #00f0ff;
+  --p2:         #ff00aa;
+  --easy:       #44ff88;
+  --text:       #e0e0e0;
+  --text-dim:   #666;
+  --card-bg:    rgba(255, 255, 255, 0.025);
+  --card-border:rgba(255, 255, 255, 0.07);
+}
+
+/* ── Base ───────────────────────────────────────────────────── */
+
+html,
+body
+{
   width: 100%;
   height: 100%;
   background: #020210;
@@ -12,9 +48,14 @@ html, body {
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  color: var(--text);
 }
 
-#canvas-container {
+/* ── Canvas ─────────────────────────────────────────────────── */
+
+#canvas-container
+{
   position: relative;
   width: 100%;
   height: 100%;
@@ -23,12 +64,747 @@ html, body {
   justify-content: center;
 }
 
-#game-canvas {
+#game-canvas
+{
   display: block;
-  /* CSS scales the canvas to fit viewport while preserving 16:9 */
   max-width: 100vw;
   max-height: 100vh;
   aspect-ratio: 16 / 9;
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
+  /* No pixelated rendering — DPR scaling gives us sharp native pixels */
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   SHARED OVERLAY BASE
+   Both overlays are fixed full-screen, hidden by default.
+   ══════════════════════════════════════════════════════════════ */
+
+#difficulty-overlay,
+#pause-overlay,
+#end-overlay
+{
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+
+#difficulty-overlay.active,
+#pause-overlay.active,
+#end-overlay.active
+{
+  display: flex;
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   DIFFICULTY SELECT
+   Opaque — fully replaces the canvas view.
+   ══════════════════════════════════════════════════════════════ */
+
+#difficulty-overlay
+{
+  background: var(--bg);
+}
+
+/* Content column */
+.overlay-screen
+{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.8rem;
+  max-width: 440px;
+  width: 100%;
+  padding: 1.5rem;
+  animation: screen-enter 0.45s ease both;
+}
+
+@keyframes screen-enter
+{
+  from
+  {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to
+  {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Gradient title ─────────────────────────────────────────── */
+
+.game-title
+{
+  font-size: clamp(2.2rem, 7vw, 3.2rem);
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  background: linear-gradient(135deg, var(--p1), var(--p2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: title-float 3s ease-in-out infinite;
+  will-change: transform, filter;
+}
+
+@keyframes title-float
+{
+  0%, 100%
+  {
+    transform: translateY(0);
+    filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.35));
+  }
+  50%
+  {
+    transform: translateY(-5px);
+    filter:
+      drop-shadow(0 0 14px rgba(0, 240, 255, 0.7))
+      drop-shadow(0 0 22px rgba(255, 0, 170, 0.35));
+  }
+}
+
+/* ── Subtitle ───────────────────────────────────────────────── */
+
+.screen-subtitle
+{
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+/* ── Difficulty card container ──────────────────────────────── */
+
+.difficulty-card
+{
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 20px;
+  padding: 1.4rem;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+/* Animated gradient border glow */
+.difficulty-card::before
+{
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 20px;
+  background: linear-gradient(135deg,
+    rgba(0, 240, 255, 0.22),
+    rgba(255, 0, 170, 0.22),
+    rgba(0, 240, 255, 0.22));
+  background-size: 200% 200%;
+  animation: card-glow 5s ease-in-out infinite;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+@keyframes card-glow
+{
+  0%, 100% { background-position: 0% 50%; }
+  50%       { background-position: 100% 50%; }
+}
+
+/* ── Difficulty buttons ─────────────────────────────────────── */
+
+.btn-diff
+{
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  padding: 1rem 1.25rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  position: relative;
+  z-index: 1;
+  transition:
+    border-color 0.2s ease,
+    box-shadow   0.2s ease,
+    background   0.2s ease,
+    transform    0.15s ease;
+
+  /* Staggered entrance */
+  animation: slide-up-fade 0.5s ease both;
+}
+
+.btn-diff:nth-child(1) { animation-delay: 0.12s; }
+.btn-diff:nth-child(2) { animation-delay: 0.22s; }
+.btn-diff:nth-child(3) { animation-delay: 0.32s; }
+
+@keyframes slide-up-fade
+{
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Left edge indicator bar — color set per difficulty below */
+.btn-diff.selected::after
+{
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 18%;
+  height: 64%;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+}
+
+/* Per-difficulty colors */
+.btn-diff[data-diff="0"]:hover,
+.btn-diff[data-diff="0"].selected
+{
+  border-color: rgba(68, 255, 136, 0.55);
+  box-shadow:
+    0 0 20px rgba(68, 255, 136, 0.14),
+    inset 0 0 18px rgba(68, 255, 136, 0.04);
+  background: rgba(68, 255, 136, 0.05);
+}
+
+.btn-diff[data-diff="0"].selected::after { background: var(--easy); }
+
+.btn-diff[data-diff="1"]:hover,
+.btn-diff[data-diff="1"].selected
+{
+  border-color: rgba(0, 240, 255, 0.55);
+  box-shadow:
+    0 0 20px rgba(0, 240, 255, 0.14),
+    inset 0 0 18px rgba(0, 240, 255, 0.04);
+  background: rgba(0, 240, 255, 0.05);
+}
+
+.btn-diff[data-diff="1"].selected::after { background: var(--p1); }
+
+.btn-diff[data-diff="2"]:hover,
+.btn-diff[data-diff="2"].selected
+{
+  border-color: rgba(255, 0, 170, 0.55);
+  box-shadow:
+    0 0 20px rgba(255, 0, 170, 0.14),
+    inset 0 0 18px rgba(255, 0, 170, 0.04);
+  background: rgba(255, 0, 170, 0.05);
+}
+
+.btn-diff[data-diff="2"].selected::after { background: var(--p2); }
+
+.btn-diff:active { transform: scale(0.97); }
+
+/* Emoji */
+.diff-emoji
+{
+  font-size: 1.5rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+/* Text column inside each button */
+.diff-text
+{
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.diff-label
+{
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.diff-desc
+{
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+/* ── God Mode toggle ────────────────────────────────────────── */
+
+.god-mode-toggle
+{
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  width: 100%;
+  padding: 0.72rem 1rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 230, 0, 0.18);
+  background: rgba(255, 230, 0, 0.03);
+  transition:
+    border-color 0.2s ease,
+    background   0.2s ease,
+    box-shadow   0.2s ease;
+  user-select: none;
+  animation: slide-up-fade 0.5s ease 0.38s both;
+}
+
+.god-mode-toggle:hover
+{
+  border-color: rgba(255, 230, 0, 0.45);
+  background: rgba(255, 230, 0, 0.07);
+  box-shadow: 0 0 18px rgba(255, 230, 0, 0.10);
+}
+
+.god-mode-toggle:has(input:checked)
+{
+  border-color: rgba(255, 230, 0, 0.65);
+  background: rgba(255, 230, 0, 0.10);
+  box-shadow: 0 0 22px rgba(255, 230, 0, 0.18);
+}
+
+.god-mode-toggle input[type="checkbox"]
+{
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+  cursor: pointer;
+  accent-color: #ffe600;
+}
+
+.god-mode-text
+{
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+}
+
+.god-mode-label
+{
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  color: #ffe600;
+}
+
+.god-mode-desc
+{
+  font-size: 0.70rem;
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+/* ── Controls hint ──────────────────────────────────────────── */
+
+.controls-hint
+{
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  opacity: 0.55;
+  letter-spacing: 0.04em;
+  animation: slide-up-fade 0.5s ease 0.42s both;
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   END SCREEN
+   Semi-transparent overlay; frozen canvas shows behind it.
+   ══════════════════════════════════════════════════════════════ */
+
+#end-overlay
+{
+  background: rgba(4, 4, 22, 0.87);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* Card */
+.end-card
+{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  max-width: 420px;
+  width: 100%;
+  padding: 2.5rem 2rem;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  text-align: center;
+  animation: card-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes card-enter
+{
+  from { opacity: 0; transform: scale(0.90) translateY(16px); }
+  to   { opacity: 1; transform: scale(1)    translateY(0); }
+}
+
+/* Winner heading */
+.end-winner
+{
+  font-size: clamp(1.7rem, 5vw, 2.6rem);
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  animation: slam 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both;
+}
+
+@keyframes slam
+{
+  0%   { transform: scale(1.5); opacity: 0; }
+  60%  { transform: scale(0.95); }
+  100% { transform: scale(1);   opacity: 1; }
+}
+
+.end-winner.player-wins
+{
+  color: var(--p1);
+  text-shadow: 0 0 28px rgba(0, 240, 255, 0.55);
+}
+
+.end-winner.ai-wins
+{
+  color: var(--p2);
+  text-shadow: 0 0 28px rgba(255, 0, 170, 0.55);
+}
+
+/* Score */
+.end-score
+{
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin-bottom: 1.4rem;
+  animation: slide-up-fade 0.5s ease 0.2s both;
+}
+
+/* Stats */
+.end-stats
+{
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 2rem;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  animation: slide-up-fade 0.5s ease 0.28s both;
+}
+
+.end-stat-sparks
+{
+  color: #ffe600;
+  font-weight: 600;
+}
+
+/* Buttons */
+.end-buttons
+{
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  width: 100%;
+  margin-bottom: 1.4rem;
+}
+
+.btn-end
+{
+  font-family: inherit;
+  width: 100%;
+  padding: 0.85rem 1.5rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  transition:
+    border-color 0.2s ease,
+    box-shadow   0.2s ease,
+    background   0.2s ease,
+    transform    0.15s ease;
+
+  /* Staggered entrance */
+  animation: slide-up-fade 0.5s ease both;
+}
+
+.btn-end:nth-child(1) { animation-delay: 0.3s; }
+.btn-end:nth-child(2) { animation-delay: 0.4s; }
+.btn-end:nth-child(3) { animation-delay: 0.5s; }
+
+.btn-end:hover,
+.btn-end.selected
+{
+  border-color: rgba(0, 240, 255, 0.5);
+  box-shadow: 0 0 18px rgba(0, 240, 255, 0.13);
+  background: rgba(0, 240, 255, 0.06);
+  transform: translateY(-1px);
+}
+
+.btn-end:active { transform: scale(0.97); }
+
+/* Ghost variant — Main Menu */
+.btn-end.btn-ghost
+{
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.06);
+  color: var(--text-dim);
+}
+
+.btn-end.btn-ghost:hover,
+.btn-end.btn-ghost.selected
+{
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: var(--text);
+  box-shadow: none;
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   PAUSE BUTTON
+   Fixed top-right; hidden during menus, shown during gameplay.
+   Squircle dark-glass design — Zynga spec.
+   ══════════════════════════════════════════════════════════════ */
+
+.pause-btn
+{
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 25;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  border: 1.5px solid rgba(0, 240, 255, 0.28);
+  background: rgba(10, 10, 46, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: rgba(255, 255, 255, 0.80);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.55),
+    0 0 12px rgba(0, 240, 255, 0.18);
+  transition:
+    border-color 0.2s ease,
+    color        0.2s ease,
+    box-shadow   0.2s ease,
+    transform    0.15s ease;
+  outline: none;
+}
+
+.pause-btn:hover
+{
+  border-color: rgba(0, 240, 255, 0.60);
+  color: #fff;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.55),
+    0 0 22px rgba(0, 240, 255, 0.38);
+  transform: scale(1.06);
+}
+
+.pause-btn:active
+{
+  transform: scale(0.94);
+}
+
+.pause-btn:focus-visible
+{
+  outline: 2px solid var(--p1);
+  outline-offset: 3px;
+}
+
+.pause-btn.hidden
+{
+  display: none;
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   PAUSE OVERLAY + CARD
+   Semi-transparent backdrop; dark glass card floats centre.
+   Zynga spec — three-tier button hierarchy.
+   ══════════════════════════════════════════════════════════════ */
+
+#pause-overlay
+{
+  background: rgba(4, 4, 22, 0.82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* Dark glass card with cyan top-edge highlight */
+.pause-card
+{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 320px;
+  width: 90%;
+  padding: 2.4rem 2rem 2rem;
+  background: linear-gradient(160deg, rgba(20, 20, 60, 0.95), rgba(10, 10, 36, 0.98));
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-top-color: rgba(0, 240, 255, 0.45);
+  border-radius: 24px;
+  text-align: center;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.70);
+  animation: card-enter 0.38s cubic-bezier(0.34, 1.4, 0.64, 1) both;
+}
+
+/* Heading */
+.pause-card__title
+{
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: 0.20em;
+  color: var(--p1);
+  text-shadow: 0 0 20px rgba(0, 240, 255, 0.45);
+  margin-bottom: 1.8rem;
+}
+
+/* Button stack */
+.pause-buttons
+{
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: 100%;
+}
+
+/* ── Shared base for all pause modal buttons ── */
+.btn-pause
+{
+  font-family: inherit;
+  width: 100%;
+  padding: 0.82rem 1.5rem;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition:
+    border-color     0.18s ease,
+    box-shadow       0.18s ease,
+    background-color 0.18s ease,
+    color            0.18s ease,
+    transform        0.13s ease;
+  animation: slide-up-fade 0.4s ease both;
+}
+
+.btn-pause:nth-child(1) { animation-delay: 0.08s; }
+.btn-pause:nth-child(2) { animation-delay: 0.15s; }
+.btn-pause:nth-child(3) { animation-delay: 0.22s; }
+
+.btn-pause:active { transform: scale(0.96); }
+
+/* ── Primary — solid cyan fill, dark text (Resume) ── */
+.btn-pause--primary
+{
+  background-color: #00d4e8;
+  border: 1.5px solid rgba(0, 240, 255, 0.70);
+  color: #050520;
+  box-shadow: 0 0 18px rgba(0, 240, 255, 0.30);
+}
+
+.btn-pause--primary.selected
+{
+  background-color: #00f0ff;
+  box-shadow:
+    0 0 18px rgba(0, 240, 255, 0.30),
+    0 0 0 2px rgba(0, 240, 255, 0.70);
+}
+
+.btn-pause--primary:hover,
+.btn-pause--primary.selected:hover
+{
+  background-color: #0d0d42;
+  border-color: rgba(0, 240, 255, 0.70);
+  color: #ffffff;
+  box-shadow: 0 0 22px rgba(0, 240, 255, 0.25);
+}
+
+/* ── Secondary — ghost (Restart Match) ── */
+.btn-pause--secondary
+{
+  background: transparent;
+  border: 1.5px solid rgba(255, 255, 255, 0.14);
+  color: var(--text);
+}
+
+.btn-pause--secondary:hover
+{
+  border-color: rgba(0, 240, 255, 0.45);
+  box-shadow: 0 0 16px rgba(0, 240, 255, 0.12);
+  background: rgba(0, 240, 255, 0.05);
+  transform: none;
+}
+
+.btn-pause--secondary.selected
+{
+  border-color: rgba(0, 240, 255, 0.45);
+  box-shadow:
+    0 0 14px rgba(0, 240, 255, 0.10),
+    0 0 0 2px rgba(0, 240, 255, 0.55);
+  background: rgba(0, 240, 255, 0.05);
+  transform: none;
+}
+
+/* ── Danger — ghost red (Quit to Menu) ── */
+.btn-pause--danger
+{
+  background: transparent;
+  border: 1.5px solid rgba(255, 255, 255, 0.07);
+  color: rgba(255, 100, 100, 0.65);
+}
+
+.btn-pause--danger:hover
+{
+  border-color: rgba(255, 80, 80, 0.45);
+  box-shadow: 0 0 16px rgba(255, 60, 60, 0.14);
+  background: rgba(255, 60, 60, 0.05);
+  color: rgba(255, 130, 130, 0.90);
+  transform: none;
+}
+
+.btn-pause--danger.selected
+{
+  border-color: rgba(255, 80, 80, 0.45);
+  box-shadow:
+    0 0 14px rgba(255, 60, 60, 0.12),
+    0 0 0 2px rgba(255, 80, 80, 0.55);
+  background: rgba(255, 60, 60, 0.05);
+  color: rgba(255, 130, 130, 0.90);
+  transform: none;
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   REDUCED MOTION
+   ══════════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce)
+{
+  *,
+  *::before,
+  *::after
+  {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -102,7 +102,7 @@ export const GOAL_PARTICLE_GRAVITY = 150; // px/s²
 export const WALL_MARK_FADE_MS   = 10000; // 10s fade time
 
 // ─── Match / Modes ─────────────────────────────────────────────────────────
-export const MATCH_TARGET        = 10;
+export const MATCH_TARGET        = 5;
 export const TIME_ATTACK_SECS    = 60;
 export const SURVIVAL_LIVES      = 5;
 
@@ -138,11 +138,41 @@ export const ZOOM_LEGENDARY        = 0.025; // 1.025×
 export const LEGENDARY_SHAKE_INTENSITY = 10; // px — bigger shake for legendary rallies
 export const LEGENDARY_SHAKE_MS        = 600;
 
-// ─── AI Tuning ─────────────────────────────────────────────────────────────
+// ─── AI Tuning — Medium (default) ─────────────────────────────────────────
 export const AI_SPEED_FACTOR       = 0.85; // fraction of PADDLE_BASE_SPEED AI can reach
 export const AI_REACTION_DELAY_MIN = 120;  // ms min between AI target recalculations
 export const AI_REACTION_DELAY_MAX = 180;  // ms max between AI target recalculations
 export const AI_TARGET_OFFSET_MAX  = 40;   // ±px random error on predicted Y
+
+// ─── AI Tuning — Easy ──────────────────────────────────────────────────────
+export const AI_EASY_SPEED_FACTOR       = 0.58;
+export const AI_EASY_REACTION_DELAY_MIN = 240;
+export const AI_EASY_REACTION_DELAY_MAX = 380;
+export const AI_EASY_TARGET_OFFSET_MAX  = 90;
+
+// ─── AI Tuning — Hard ──────────────────────────────────────────────────────
+export const AI_HARD_SPEED_FACTOR       = 0.97;
+export const AI_HARD_REACTION_DELAY_MIN = 55;
+export const AI_HARD_REACTION_DELAY_MAX = 95;
+export const AI_HARD_TARGET_OFFSET_MAX  = 6;
+
+// ─── Power-Up Collectibles ────────────────────────────────────────────────
+export const POWERUP_SPAWN_MIN_MS   = 8000;   // earliest a new orb spawns after last
+export const POWERUP_SPAWN_MAX_MS   = 18000;  // latest a new orb spawns
+export const POWERUP_LIFETIME_MS    = 8000;   // orb fades/expires if uncollected
+export const POWERUP_BOOST_MS       = 8000;   // boost duration after collection
+export const POWERUP_RADIUS         = 20;     // orb collision radius (px)
+export const POWERUP_WIDE_FACTOR    = 1.5;    // paddle height multiplier
+export const POWERUP_SPEED_FACTOR   = 1.4;   // paddle max-speed multiplier
+export const POWERUP_TRAIL_FACTOR   = 3.0;   // trail length/brightness multiplier
+export const POWERUP_STICKY_HOLD_MS  = 500;   // ms ball is held on sticky paddle
+export const POWERUP_SPEED_ACCEL_FACTOR = 1.5; // extra acceleration multiplier for SPEED_BOOTS
+export const POWERUP_TRAIL_SPEED_BONUS  = 25;  // px/s added to ball on each hit with TRAIL_BLAZER
+
+export const COLOR_POWERUP_WIDE    = '#44ff88';  // green
+export const COLOR_POWERUP_SPEED   = '#ffe600';  // yellow
+export const COLOR_POWERUP_STICKY  = '#ff00aa';  // magenta
+export const COLOR_POWERUP_TRAIL   = '#00f0ff';  // cyan
 
 // ─── Upgrade Costs (Neon Sparks ⚡) ───────────────────────────────────────
 export const COST_WIDE_PADDLE    = 5;

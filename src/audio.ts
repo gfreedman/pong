@@ -272,6 +272,12 @@ export class AudioManager {
     this.osc('sine', 480, 0.15, 0.07);
   }
 
+  /** Power-up collected — bright two-tone chime */
+  playPowerUpCollect(): void {
+    this.osc('sine', 660, 0.18, 0.08);
+    setTimeout(() => this.osc('sine', 990, 0.22, 0.12), 55);
+  }
+
   /** "SPIN" discovery moment — brief magical shimmer */
   playSpinDiscovery(): void {
     [800, 1000, 1200, 1000].forEach((hz, i) => {
