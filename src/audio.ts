@@ -17,6 +17,9 @@ export class AudioManager {
       this.masterGain.gain.value = 0.6;
       this.masterGain.connect(this.ctx.destination);
     }
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume();
+    }
     return this.ctx;
   }
 
