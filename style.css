@@ -950,7 +950,7 @@ body
   font-size: 0.67rem;
   font-weight: 600;
   letter-spacing: 0.24em;
-  color: var(--text-dim);
+  color: rgba(255, 255, 255, 0.90);
   text-transform: uppercase;
   margin-bottom: 1rem;
   display: flex;
@@ -1015,6 +1015,13 @@ body
   color: rgba(224, 224, 224, 0.55);
 }
 
+.htp-key-or
+{
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.28);
+  font-weight: 400;
+}
+
 /* ── Difficulty rows ────────────────────────────────────────── */
 
 .htp-diff-list
@@ -1031,19 +1038,14 @@ body
   align-items: flex-start;
 }
 
-/* Colored dot indicator */
-.htp-diff-dot
+/* Emoji icon indicator */
+.htp-diff-emoji
 {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  margin-top: 0.28em;
+  font-size: 1.25rem;
+  line-height: 1;
   flex-shrink: 0;
+  margin-top: 0.05em;
 }
-
-.htp-diff-dot--easy   { background: var(--easy); box-shadow: 0 0 6px rgba(68, 255, 136, 0.55); }
-.htp-diff-dot--medium { background: var(--p1);   box-shadow: 0 0 6px rgba(0, 240, 255, 0.55);  }
-.htp-diff-dot--hard   { background: var(--p2);   box-shadow: 0 0 6px rgba(255, 0, 170, 0.55);  }
 
 .htp-diff-body { flex: 1; }
 
@@ -1135,20 +1137,14 @@ body
   align-items: flex-start;
 }
 
-/* Color swatch square */
-.htp-pu-swatch
+/* Emoji icon for power-up rows */
+.htp-pu-emoji
 {
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-  margin-top: 0.28em;
+  font-size: 1.25rem;
+  line-height: 1;
   flex-shrink: 0;
+  margin-top: 0.05em;
 }
-
-.htp-pu-swatch--wide   { background: #44ff88; box-shadow: 0 0 7px rgba(68, 255, 136, 0.55); }
-.htp-pu-swatch--speed  { background: #ffe600; box-shadow: 0 0 7px rgba(255, 230, 0, 0.55);  }
-.htp-pu-swatch--sticky { background: #ff00aa; box-shadow: 0 0 7px rgba(255, 0, 170, 0.55);  }
-.htp-pu-swatch--trail  { background: #00f0ff; box-shadow: 0 0 7px rgba(0, 240, 255, 0.55);  }
 
 .htp-pu-body { flex: 1; }
 

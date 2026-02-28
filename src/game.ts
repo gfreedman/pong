@@ -653,7 +653,7 @@ export class Game
   private setupOverlayEvents(): void
   {
     /* ── Difficulty buttons — click selects AND confirms (no two-step) ── */
-    this.difficultyOverlay.querySelectorAll<HTMLElement>('.btn-diff').forEach(btn =>
+    this.difficultyOverlay.querySelectorAll<HTMLElement>('.btn-diff[data-diff]').forEach(btn =>
     {
       btn.addEventListener('click', () =>
       {
