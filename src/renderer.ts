@@ -1,6 +1,6 @@
 // Renderer — all canvas drawing; pure output, no state mutation
 
-import { Ball, Paddle, ImpactRing, WallMark, GoalFlash, GoalParticle, GameState, GamePhase, PowerUp, ActiveBoost, PowerUpType } from './types.js';
+import { Ball, Paddle, ImpactRing, WallMark, GoalFlash, GoalParticle, GameState, PowerUp, ActiveBoost, PowerUpType } from './types.js';
 import {
   CANVAS_WIDTH, CANVAS_HEIGHT,
   COLOR_BG, COLOR_P1, COLOR_P2, COLOR_BALL, COLOR_COURT, COLOR_SPARK, COLOR_HIT_FLASH,
@@ -159,25 +159,6 @@ export class Renderer {
     if (rc >= RALLY_TIER_LEGENDARY) {
       this.drawEdgePulse(rc);
     }
-  }
-
-  drawToyMode(state: GameState, shakeX: number, shakeY: number): void {
-    const { ctx } = this;
-
-    ctx.save();
-    ctx.translate(shakeX, shakeY);
-
-    this.drawBackground();
-    this.drawWallMarks(state.wallMarks);
-    this.drawToyCourtMarkings();
-    this.drawGoalParticles(state.goalParticles);
-    this.drawBallTrail(state.ball);
-    this.drawBall(state.ball);
-    this.drawPaddle(state.player1);
-    this.drawImpactRings(state.impactRings);
-    this.drawGoalFlashes(state.goalFlashes);
-
-    ctx.restore();
   }
 
   // ─── Background ─────────────────────────────────────────────────────────
@@ -818,61 +799,6 @@ export class Renderer {
     }
   }
 
-  // ─── Menu screen ────────────────────────────────────────────────────────
-
-  drawMenu(selectedIndex: number, options: string[], sparks: number): void {
-    const { ctx } = this;
-    this.drawBackground();
-
-    // Title
-    ctx.save();
-    ctx.textAlign = 'center';
-    const pulse = 0.85 + 0.15 * Math.sin(Date.now() * 0.002);
-    ctx.globalAlpha = pulse;
-    ctx.font = 'bold 64px "Courier New", monospace';
-    ctx.fillStyle = COLOR_P1;
-    ctx.shadowColor = COLOR_P1;
-    ctx.shadowBlur = 30;
-    ctx.fillText('NEON PONG', CANVAS_WIDTH / 2, 160);
-    ctx.restore();
-
-    // Menu options
-    const startY = 260;
-    const lineH = 50;
-    options.forEach((label, i) => {
-      const y = startY + i * lineH;
-      const isSelected = i === selectedIndex;
-
-      ctx.save();
-      ctx.textAlign = 'center';
-      ctx.font = `${isSelected ? 'bold ' : ''}26px "Courier New", monospace`;
-      ctx.fillStyle = isSelected ? COLOR_P1 : 'rgba(200,200,255,0.55)';
-      if (isSelected) {
-        ctx.shadowColor = COLOR_P1;
-        ctx.shadowBlur = 18;
-      }
-      ctx.fillText((isSelected ? '▸  ' : '   ') + label, CANVAS_WIDTH / 2, y);
-      ctx.restore();
-    });
-
-    // Sparks display
-    if (sparks > 0) {
-      ctx.save();
-      ctx.font = '16px "Courier New", monospace';
-      ctx.fillStyle = COLOR_SPARK;
-      ctx.textAlign = 'right';
-      ctx.shadowColor = COLOR_SPARK;
-      ctx.shadowBlur = 8;
-      ctx.fillText(`⚡ ${sparks}`, CANVAS_WIDTH - 24, 30);
-      ctx.restore();
-    }
-  }
-
-  drawModeSelect(selectedIndex: number, options: string[], title: string): void {
-    this.drawBackground();
-    this.drawCenteredMenu(title, options, selectedIndex);
-  }
-
   // ─── Countdown ──────────────────────────────────────────────────────────
 
   drawCountdown(text: string, ball: Ball): void {
@@ -1244,36 +1170,4 @@ export class Renderer {
     }
   }
 
-  // ─── Helpers ────────────────────────────────────────────────────────────
-
-  private drawCenteredMenu(
-    title: string,
-    options: string[],
-    selectedIndex: number,
-    startY = 220
-  ): void {
-    const { ctx } = this;
-    ctx.save();
-    ctx.textAlign = 'center';
-
-    if (title) {
-      ctx.font = 'bold 32px "Courier New", monospace';
-      ctx.fillStyle = '#ffffff';
-      ctx.shadowColor = COLOR_P1;
-      ctx.shadowBlur = 14;
-      ctx.fillText(title, CANVAS_WIDTH / 2, startY - 40);
-    }
-
-    options.forEach((label, i) => {
-      const y = startY + i * 50;
-      const isSelected = i === selectedIndex;
-      ctx.font = `${isSelected ? 'bold ' : ''}24px "Courier New", monospace`;
-      ctx.fillStyle = isSelected ? COLOR_P1 : 'rgba(200,200,255,0.5)';
-      ctx.shadowColor = isSelected ? COLOR_P1 : 'transparent';
-      ctx.shadowBlur = isSelected ? 14 : 0;
-      ctx.fillText((isSelected ? '▸  ' : '   ') + label, CANVAS_WIDTH / 2, y);
-    });
-
-    ctx.restore();
-  }
 }

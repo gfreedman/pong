@@ -101,18 +101,12 @@ export const GOAL_PARTICLE_GRAVITY = 150; // px/s²
 // ─── Wall Marks (scorch marks) ────────────────────────────────────────────
 export const WALL_MARK_FADE_MS   = 10000; // 10s fade time
 
-// ─── Match / Modes ─────────────────────────────────────────────────────────
+// ─── Match ─────────────────────────────────────────────────────────────────
 export const MATCH_TARGET        = 5;
-export const TIME_ATTACK_SECS    = 60;
-export const SURVIVAL_LIVES      = 5;
 
 // ─── Serve ─────────────────────────────────────────────────────────────────
 export const SERVE_ANGLE_RANGE   = 30;   // ± degrees from horizontal
 export const SERVE_COUNTDOWN_MS  = 1000; // after player signals ready
-export const SERVE_AUTO_READY_MS = 5000; // PvP auto-serve timeout
-
-// ─── Phase Timers ──────────────────────────────────────────────────────────
-export const POINT_SCORED_PAUSE_MS = 800; // legacy — replaced by rally-dependent exhale
 
 // ─── Rally Escalation Tiers ───────────────────────────────────────────────
 export const RALLY_TIER_BUILDING   = 4;   // hits  4-7:  subtle bass, longer trail
@@ -174,20 +168,3 @@ export const COLOR_POWERUP_SPEED   = '#ffe600';  // yellow
 export const COLOR_POWERUP_STICKY  = '#ff00aa';  // magenta
 export const COLOR_POWERUP_TRAIL   = '#00f0ff';  // cyan
 
-// ─── Upgrade Costs (Neon Sparks ⚡) ───────────────────────────────────────
-export const COST_WIDE_PADDLE    = 5;
-export const COST_SPEED_BOOTS    = 6;
-export const COST_STICKY_PADDLE  = 8;
-export const COST_TRAIL_BLAZER   = 3;
-
-// ─── Active Ability Cooldowns (ms) ────────────────────────────────────────
-export const CD_TURBO_SHOT       = 8000;
-export const CD_SLOW_FIELD       = 12000;
-export const CD_CURVE_SHOT       = 10000; // replaces Phase Shift per Nintendo review
-export const CD_SHIELD_PULSE     = 10000;
-
-// ─── Sparks Economy ────────────────────────────────────────────────────────
-export const SPARKS_PER_POINT    = 1;
-export const SPARKS_MATCH_WIN    = 3;
-export const LONG_RALLY_THRESH   = 10;
-export const SPARKS_LONG_RALLY   = 2;

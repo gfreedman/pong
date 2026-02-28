@@ -501,12 +501,6 @@ body
   animation: slide-up-fade 0.5s ease 0.28s both;
 }
 
-.end-stat-sparks
-{
-  color: #ffe600;
-  font-weight: 600;
-}
-
 /* Buttons */
 .end-buttons
 {

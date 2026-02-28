@@ -11,7 +11,7 @@ import {
   SHAKE_GOAL_INTENSITY, SHAKE_GOAL_MS,
   BALL_SAD_MS,
   SERVE_COUNTDOWN_MS,
-  MATCH_TARGET, SPARKS_PER_POINT, SPARKS_MATCH_WIN,
+  MATCH_TARGET,
   RALLY_TIER_BUILDING, RALLY_TIER_INTENSE, RALLY_TIER_DRAMATIC, RALLY_TIER_LEGENDARY,
   EXHALE_BASE_MS, EXHALE_PER_RALLY_HIT, EXHALE_EXTRA_CAP_MS,
   BALL_MATERIALIZE_MS,
@@ -111,8 +111,7 @@ export class Game {
   private countdownStep = 3;
 
   // End screen
-  private endScreenIndex = 1;
-  private sparksEarned = 0;
+  private endScreenIndex = 0;
 
   // Serve direction: true = toward left (P1 receives), false = toward right (P2)
   private servingToward = true;
@@ -351,7 +350,7 @@ export class Game {
   }
 
   private tickMatchEnd(): void {
-    const OPTIONS = 3;
+    const OPTIONS = 2;
     if (this.input.menuUp()) {
       this.endScreenIndex = (this.endScreenIndex - 1 + OPTIONS) % OPTIONS;
       this.setEndSelection(this.endScreenIndex);
@@ -477,12 +476,12 @@ export class Game {
   private handleEndConfirm(): void {
     this.audio.playMenuConfirm();
     this.hideEndOverlay();
-    if (this.endScreenIndex === 2) {
+    if (this.endScreenIndex === 1) {
       // Main Menu
       this.state.phase = 'DIFFICULTY_SELECT';
       this.showDifficultyOverlay();
     } else {
-      // Rematch or Upgrade Shop (placeholder → same as rematch)
+      // Rematch
       this.resetMatch();
     }
   }
@@ -499,17 +498,16 @@ export class Game {
     this.difficultyOverlay.setAttribute('aria-hidden', 'true');
   }
 
-  private showEndOverlay(winner: string, score1: number, score2: number, longestRally: number, sparks: number): void {
+  private showEndOverlay(winner: string, score1: number, score2: number, longestRally: number): void {
     this.pauseBtn.classList.add('hidden');
     const winnerEl = document.getElementById('end-winner')!;
     winnerEl.textContent = winner;
     winnerEl.className = 'end-winner ' + (winner === 'PLAYER WINS!' ? 'player-wins' : 'ai-wins');
     document.getElementById('end-score')!.textContent = `${score1}  —  ${score2}`;
     document.getElementById('end-stats')!.innerHTML =
-      `<span>Longest Rally: ${longestRally} hits</span>` +
-      `<span class="end-stat-sparks">⚡ +${sparks} Neon Sparks</span>`;
-    this.endScreenIndex = 1;
-    this.setEndSelection(1);
+      `<span>Longest Rally: ${longestRally} hits</span>`;
+    this.endScreenIndex = 0;
+    this.setEndSelection(0);
     this.endOverlay.classList.add('active');
     this.endOverlay.setAttribute('aria-hidden', 'false');
   }
@@ -776,14 +774,11 @@ export class Game {
       state.ball.stickyOwner = null;
       state.materializeAlpha = 0;
 
-      this.sparksEarned += SPARKS_PER_POINT;
-
       if (state.score1 >= MATCH_TARGET || state.score2 >= MATCH_TARGET) {
-        this.sparksEarned += SPARKS_MATCH_WIN;
         state.phase = 'MATCH_END';
         this.audio.playMatchWin();
         const winner = state.score1 >= MATCH_TARGET ? 'PLAYER WINS!' : 'AI WINS!';
-        this.showEndOverlay(winner, state.score1, state.score2, state.longestRally, this.sparksEarned);
+        this.showEndOverlay(winner, state.score1, state.score2, state.longestRally);
       } else {
         state.phase = 'POINT_SCORED';
         this.phaseTimer = exhaleMs;
@@ -823,7 +818,6 @@ export class Game {
     state.lastHitPlayer = 1;
 
     this.rallyHits = 0;
-    this.sparksEarned = 0;
     this.currentDroneTier = 0;
     this.servingToward = true;
     this.gameTime = 0;

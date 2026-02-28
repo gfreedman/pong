@@ -3,17 +3,11 @@
 export type GamePhase =
   | 'PLAYING'
   | 'PAUSED'
-  | 'MENU'
-  | 'MODE_SELECT'
   | 'DIFFICULTY_SELECT'
-  | 'SIDE_SELECT'
   | 'POINT_SCORED'
   | 'SERVE_PENDING'
   | 'SERVING'
-  | 'MATCH_END'
-  | 'UPGRADE_SHOP';
-
-export type GameMode = 'QUICK_PLAY' | 'MATCH' | 'TIME_ATTACK' | 'SURVIVAL';
+  | 'MATCH_END';
 export type Difficulty = 'EASY' | 'MEDIUM' | 'HARD';
 export type PlayerSide = 'LEFT' | 'RIGHT';
 
