@@ -509,6 +509,68 @@ export const AI_HARD_REACTION_DELAY_MAX = 95;
 /** Max ±px random error for Hard AI — very small, nearly precise. */
 export const AI_HARD_TARGET_OFFSET_MAX  = 6;
 
+/* ─── AI Form System — Streak / hot-cold dynamics ───────────────────────────
+   The Skill Curve Model gives the AI a "form" value in [-1, +1].
+   Scoring a point pushes form toward +1 (hot streak).
+   Conceding a point pushes form toward -1 (cold streak).
+   Form decays slowly toward 0 each frame so streaks fade naturally.
+
+   Effective parameters (speed, reaction delay, error) are derived from form
+   each decision cycle, so the AI's quality ebbs and flows like a real player.
+   False reads — mirrored trajectory predictions — simulate misreading spin or
+   bounce angle.  They only fire on cold streaks so they feel earned, not random.
+
+   Tests access config.speedFactor / reactionDelayMin / reactionDelayMax via
+   `as any` and check baseline values at neutral form (form = 0), which matches
+   the original constants.  The dynamic modulation is invisible to those tests.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/** Form increase applied when the AI scores a point (hot streak bonus). */
+export const AI_FORM_HIT_BONUS           = 0.20;
+
+/** Form decrease applied when the AI concedes a point (cold streak penalty). */
+export const AI_FORM_MISS_PENALTY        = 0.25;
+
+/**
+ * Per-frame form decay rate.  Each frame: form *= (1 - AI_FORM_DECAY_PER_FRAME).
+ * 0.0015 → form halves in ≈ 462 frames (≈ 7.7 seconds at 60 fps).
+ */
+export const AI_FORM_DECAY_PER_FRAME     = 0.0015;
+
+/* ─── EASY tier form tuning ─────────────────────────────────────────────── */
+
+/**
+ * How much form shifts EASY AI behavior.  Large value = highly streaky.
+ * Hot streak: surprisingly quick and accurate.  Cold streak: very sloppy.
+ */
+export const AI_EASY_FORM_INFLUENCE      = 0.45;
+
+/**
+ * Base probability of a "false read" per decision cycle when EASY AI is cold.
+ * Scaled by Math.max(0, -form) so it only triggers during cold streaks.
+ * False read = AI simulates the mirrored trajectory (targets the wrong side).
+ */
+export const AI_EASY_FALSE_READ_CHANCE   = 0.30;
+
+/* ─── MEDIUM tier form tuning ───────────────────────────────────────────── */
+
+/** How much form shifts MEDIUM AI behavior.  Moderate streakiness. */
+export const AI_FORM_INFLUENCE           = 0.28;
+
+/** Base probability of a false-read for MEDIUM AI when maximally cold. */
+export const AI_FALSE_READ_CHANCE        = 0.12;
+
+/* ─── HARD tier form tuning ─────────────────────────────────────────────── */
+
+/**
+ * How much form shifts HARD AI behavior.  Small = stays dangerous even when cold.
+ * A skilled player can bait hard into rare false reads with heavy spin.
+ */
+export const AI_HARD_FORM_INFLUENCE      = 0.13;
+
+/** Base probability of a false-read for HARD AI when maximally cold. */
+export const AI_HARD_FALSE_READ_CHANCE   = 0.04;
+
 /* ═══════════════════════════════════════════════════════════════════════════
    POWER-UP COLLECTIBLES
    Orbs float onto the court mid-match and grant temporary boosts.

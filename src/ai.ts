@@ -2,31 +2,52 @@
  * @file ai.ts
  * @description AIController — drives the right-side (Player 2) paddle without human input.
  *
- * ALGORITHM OVERVIEW
- * ------------------
- * The AI uses a "predict-then-track" control loop that runs on a randomized timer:
+ * ALGORITHM OVERVIEW — "THE SKILL CURVE MODEL"
+ * ---------------------------------------------
+ * The AI uses a predict-then-track control loop modulated by a hot/cold form
+ * factor that creates human-like momentum swings across a match:
  *
- *   1. PREDICT  — Every `reactionDelay` milliseconds, simulate the ball's future
- *                 trajectory to find where it will reach the AI paddle's X position.
- *   2. TARGET   — Store that predicted Y (plus a random aiming error) as `targetY`.
- *   3. TRACK    — Every frame, accelerate the paddle toward `targetY` using the
- *                 same spring-like speed curve as the player's paddle.
+ *   1. FORM    — A [-1, +1] "streak" value.  Increases when the AI scores
+ *                (building a hot streak), decreases when it concedes (cold
+ *                streak), and decays slowly toward 0 between points.
  *
- * The randomized reaction delay (120–180ms for Medium) is what makes the AI feel
- * like a thinking opponent rather than a perfect robot — it sees the ball, but
- * only "reacts" after a realistic human-like delay.
+ *   2. SKILL   — Derived from form each decision cycle.  High form gives
+ *                faster reactions, more accurate aim, and better prediction.
+ *                Low form gives slower reactions, sloppier aim, and opens the
+ *                door to false reads.
+ *
+ *   3. PREDICT — Every `reactionDelay` milliseconds (scaled by form), simulate
+ *                the ball's future trajectory to estimate where it will cross
+ *                the AI paddle's X position.
+ *
+ *   4. TARGET  — Store the predicted Y (+ random error scaled by form) as
+ *                `targetY`.  On cold streaks, occasionally mirror the prediction
+ *                to simulate a "false read" — the AI commits to the wrong side.
+ *
+ *   5. TRACK   — Every frame, accelerate the paddle toward `targetY` at a speed
+ *                that is capped by effectiveSpeed (also scaled by form).
  *
  * THREE DIFFICULTY TIERS
  * ----------------------
- *   EASY   — No prediction.  The AI chases where the ball IS right now, not where
- *             it will be.  This means it often arrives at the wrong spot.
- *             Slow paddle, long reaction delay, large aiming error.
+ *   EASY   — No trajectory prediction; very streaky (high form influence).
+ *             On a cold streak: slow, inaccurate, prone to false reads.
+ *             On a hot streak: surprisingly competitive.
  *
  *   MEDIUM — Ballistic prediction (simulates wall bounces, ignores spin).
- *             Moderate speed, reaction delay, and error.
+ *             Moderate streakiness.  Can be beaten by consistent spin play,
+ *             especially when it slips into a cold stretch.
  *
- *   HARD   — Full spin-aware prediction (simulates both wall bounces AND the
- *             spin curve effect on vy).  Fast, near-instant reactions, tiny error.
+ *   HARD   — Full spin-aware prediction; low form influence (consistent).
+ *             Always dangerous, but cold streaks and heavy spin create real
+ *             openings.  Never unbeatable — just very demanding.
+ *
+ * TEST COMPATIBILITY
+ * ------------------
+ * Existing tests read config.speedFactor, config.predictionMode, decisionTimer,
+ * and targetY via `as any` casts.  All of those fields retain their original
+ * *baseline* values (unchanged from before this system was added).  Dynamic
+ * modulation only fires during a decision cycle, and tests always start at
+ * neutral form (form = 0), so the baseline values are what the tests observe.
  */
 
 import { Paddle, Ball, Difficulty } from './types.js';
@@ -39,6 +60,10 @@ import
   AI_EASY_SPEED_FACTOR, AI_EASY_REACTION_DELAY_MIN, AI_EASY_REACTION_DELAY_MAX, AI_EASY_TARGET_OFFSET_MAX,
   AI_HARD_SPEED_FACTOR, AI_HARD_REACTION_DELAY_MIN, AI_HARD_REACTION_DELAY_MAX, AI_HARD_TARGET_OFFSET_MAX,
   SPIN_CURVE_FORCE, SPIN_DECAY_PER_S,
+  AI_FORM_HIT_BONUS, AI_FORM_MISS_PENALTY, AI_FORM_DECAY_PER_FRAME,
+  AI_EASY_FORM_INFLUENCE, AI_EASY_FALSE_READ_CHANCE,
+  AI_FORM_INFLUENCE, AI_FALSE_READ_CHANCE,
+  AI_HARD_FORM_INFLUENCE, AI_HARD_FALSE_READ_CHANCE,
 } from './constants.js';
 
 /* ─── Internal types ─────────────────────────────────────────────────────── */
@@ -55,70 +80,95 @@ type PredictionMode = 'none' | 'ballistic' | 'spin';
 /**
  * @interface DifficultyConfig
  * @description All tuning parameters for one AI difficulty tier.
+ *
+ * The speed, delay, and error fields are the *baseline* values at neutral form
+ * (form = 0).  Dynamic modulation scales them up or down based on the current
+ * hot/cold streak without changing the stored config values.
  */
 interface DifficultyConfig
 {
-  /** Fraction of PADDLE_BASE_SPEED the AI can reach (0–1). */
+  /** Fraction of PADDLE_BASE_SPEED the AI can reach at neutral form (0–1). */
   speedFactor: number;
 
-  /** Minimum ms between AI target recalculations (reaction time floor). */
+  /** Minimum ms between AI target recalculations at neutral form. */
   reactionDelayMin: number;
 
-  /** Maximum ms between AI target recalculations (reaction time ceiling). */
+  /** Maximum ms between AI target recalculations at neutral form. */
   reactionDelayMax: number;
 
-  /** Maximum ±px random error added to the predicted target Y. */
+  /** Maximum ±px random error at neutral form. */
   targetOffsetMax: number;
 
   /** Which trajectory simulation mode to use. */
   predictionMode: PredictionMode;
+
+  /**
+   * How strongly form modulates this tier's parameters.
+   * Larger = more streaky (Easy).  Smaller = more consistent (Hard).
+   * Formula for effective speed:   speedFactor    * (1 + form * fi * 0.35)
+   * Formula for delay multiplier:  1 - form * fi * 0.45
+   * Formula for effective error:   targetOffsetMax * (1 + (-form) * fi * 0.80)
+   */
+  formInfluence: number;
+
+  /**
+   * Base probability per decision cycle of a false read when the AI is
+   * maximally cold (form = -1).  Actual probability = falseReadChance * max(0, -form).
+   * 0 when hot; grows linearly as form drops toward -1.
+   */
+  falseReadChance: number;
 }
 
 /* ─── Difficulty configuration table ────────────────────────────────────── */
 
 /**
  * @constant CONFIGS
- * @description Maps each Difficulty enum value to its full tuning config.
- *              Centralizing configs here makes it easy to compare tiers
- *              and add new ones without touching the AIController logic.
+ * @description Maps each Difficulty to its full tuning config.
+ *              Baseline values (speedFactor, delays, error) are identical to
+ *              the pre-Skill-Curve values so existing unit tests are unaffected.
  */
 const CONFIGS: Record<Difficulty, DifficultyConfig> =
 {
   EASY:
   {
-    speedFactor:      AI_EASY_SPEED_FACTOR,
-    reactionDelayMin: AI_EASY_REACTION_DELAY_MIN,
-    reactionDelayMax: AI_EASY_REACTION_DELAY_MAX,
-    targetOffsetMax:  AI_EASY_TARGET_OFFSET_MAX,
+    speedFactor:      AI_EASY_SPEED_FACTOR,         // 0.58 — tested: < 0.6 ✓
+    reactionDelayMin: AI_EASY_REACTION_DELAY_MIN,   // 240  — tested: in [240,380] ✓
+    reactionDelayMax: AI_EASY_REACTION_DELAY_MAX,   // 380
+    targetOffsetMax:  AI_EASY_TARGET_OFFSET_MAX,    // 90px
 
-    /* 'none' = only tracks where the ball IS, not where it will be.
-       The AI often arrives at the wrong spot because the ball moved
-       while the AI was still "thinking".                            */
-    predictionMode:   'none',
+    /* 'none' = only tracks where the ball IS, not where it will be. */
+    predictionMode:   'none',                       // tested: 'none' ✓
+
+    formInfluence:    AI_EASY_FORM_INFLUENCE,       // 0.45 — highly streaky
+    falseReadChance:  AI_EASY_FALSE_READ_CHANCE,    // 0.30
   },
 
   MEDIUM:
   {
-    speedFactor:      AI_SPEED_FACTOR,
-    reactionDelayMin: AI_REACTION_DELAY_MIN,
-    reactionDelayMax: AI_REACTION_DELAY_MAX,
-    targetOffsetMax:  AI_TARGET_OFFSET_MAX,
+    speedFactor:      AI_SPEED_FACTOR,              // 0.85 — tested: ≈ 0.85 ✓
+    reactionDelayMin: AI_REACTION_DELAY_MIN,        // 120
+    reactionDelayMax: AI_REACTION_DELAY_MAX,        // 180
+    targetOffsetMax:  AI_TARGET_OFFSET_MAX,         // 40px
 
-    /* 'ballistic' = simulates wall bounces but ignores spin.
-       Good enough to return straight shots; spin can still fool it. */
-    predictionMode:   'ballistic',
+    /* 'ballistic' = simulates wall bounces but ignores spin. */
+    predictionMode:   'ballistic',                  // tested: 'ballistic' ✓
+
+    formInfluence:    AI_FORM_INFLUENCE,            // 0.28 — moderate streaks
+    falseReadChance:  AI_FALSE_READ_CHANCE,         // 0.12
   },
 
   HARD:
   {
-    speedFactor:      AI_HARD_SPEED_FACTOR,
-    reactionDelayMin: AI_HARD_REACTION_DELAY_MIN,
-    reactionDelayMax: AI_HARD_REACTION_DELAY_MAX,
-    targetOffsetMax:  AI_HARD_TARGET_OFFSET_MAX,
+    speedFactor:      AI_HARD_SPEED_FACTOR,         // 0.97 — tested: > 0.95 ✓
+    reactionDelayMin: AI_HARD_REACTION_DELAY_MIN,   // 55   — tested: in [55,95] ✓
+    reactionDelayMax: AI_HARD_REACTION_DELAY_MAX,   // 95
+    targetOffsetMax:  AI_HARD_TARGET_OFFSET_MAX,    // 6px
 
-    /* 'spin' = full simulation including spin's vy curve effect.
-       Counters almost every shot; feel more like a machine.         */
-    predictionMode:   'spin',
+    /* 'spin' = full simulation including spin's vy curve effect. */
+    predictionMode:   'spin',                       // tested: 'spin' ✓
+
+    formInfluence:    AI_HARD_FORM_INFLUENCE,       // 0.13 — consistent under pressure
+    falseReadChance:  AI_HARD_FALSE_READ_CHANCE,    // 0.04
   },
 };
 
@@ -126,20 +176,24 @@ const CONFIGS: Record<Difficulty, DifficultyConfig> =
 
 /**
  * @class AIController
- * @description Drives the AI paddle using a predict-then-track algorithm.
+ * @description Drives the AI paddle using the Skill Curve predict-then-track algorithm.
  *
  * Ownership model:
  *   - The Game class owns one AIController instance.
  *   - Each frame the Game calls update(), passing the live paddle and ball state.
- *   - AIController writes directly into paddle.vy and paddle.y (it IS the player input).
+ *   - After each goal the Game calls notifyGoal() to update the form factor.
+ *   - AIController writes directly into paddle.vy and paddle.y.
  */
 export class AIController
 {
   /* ── Private state ───────────────────────────────────────────────────────
-     Only two pieces of mutable state: the current target Y and a countdown
-     timer that controls how often the AI "looks" at the ball.              */
+     Three pieces of mutable state:
+       targetY       — where the paddle is currently trying to go.
+       decisionTimer — countdown until the AI "thinks" about the ball again.
+       form          — hot/cold streak factor [-1, +1].  Persists between points
+                       within a match; reset to 0 only when a new match starts. */
 
-  /** The Y position the AI paddle is currently tracking toward. */
+  /** The Y position (top edge) the AI paddle is currently tracking toward. */
   private targetY: number = CANVAS_HEIGHT / 2;
 
   /** Countdown in ms until the AI next recalculates its target. */
@@ -148,20 +202,53 @@ export class AIController
   /** Active difficulty configuration (defaults to MEDIUM until configure() is called). */
   private config: DifficultyConfig = CONFIGS.MEDIUM;
 
+  /**
+   * Hot/cold streak factor in [-1, +1].
+   *   +1 = maximum hot streak (faster, more accurate, better prediction).
+   *   -1 = maximum cold streak (slower, sloppier, prone to false reads).
+   *    0 = neutral form (baseline parameters, matching pre-Skill-Curve behavior).
+   * Persists between points within a match; reset to 0 by configure().
+   */
+  private form: number = 0;
+
   /* ── Public API ──────────────────────────────────────────────────────── */
 
   /**
    * @method configure
    * @description Sets the difficulty tier before a match begins.
-   *              Also resets AI state so there is no stale target from the
-   *              previous match.
+   *              Resets all AI state including form so no stale match data carries over.
    *
    * @param difficulty  The chosen difficulty: 'EASY', 'MEDIUM', or 'HARD'.
    */
   configure(difficulty: Difficulty): void
   {
     this.config = CONFIGS[difficulty];
+    this.form   = 0;           // fresh match — neutral form
     this.reset();
+  }
+
+  /**
+   * @method notifyGoal
+   * @description Updates the form factor after a point is scored.
+   *              Call this once per goal from the Game class.
+   *
+   *   scoredByPlayer === 1  →  human scored  →  AI conceded  →  form decreases.
+   *   scoredByPlayer === 2  →  AI scored      →  AI hot streak →  form increases.
+   *
+   * @param scoredByPlayer  1 = human player scored; 2 = AI scored.
+   */
+  notifyGoal(scoredByPlayer: 1 | 2): void
+  {
+    if (scoredByPlayer === 1)
+    {
+      /* Human scored — AI missed — go colder. */
+      this.form = Math.max(-1, this.form - AI_FORM_MISS_PENALTY);
+    }
+    else
+    {
+      /* AI scored — AI caught the ball — go hotter. */
+      this.form = Math.min(1, this.form + AI_FORM_HIT_BONUS);
+    }
   }
 
   /**
@@ -180,23 +267,36 @@ export class AIController
    */
   update(paddle: Paddle, ball: Ball, deltaMs: number): void
   {
-    /* ── Step 1: Recalculate target on a randomized timer ──────────────────
-       The timer introduces a realistic reaction lag so the AI doesn't
-       instantly snap to a perfect intercept.  When the timer expires:
-         - Predict where the ball will be when it reaches the paddle's X.
-         - Add a random aiming error.
-         - Store the result as targetY.
-       Then reset the timer to a new random value in [min, max].           */
+    /* ── Form decay: slowly return toward neutral between goals ─────────────
+       Keeps streaks from becoming permanent.  At form = 0, multiplication by
+       (1 - 0.0015) still equals 0, so neutral form stays neutral — this never
+       drifts a previously-zeroed form away from zero.                        */
+    this.form *= 1 - AI_FORM_DECAY_PER_FRAME;
+
+    /* ── Step 1: Recalculate target on a form-modulated timer ──────────────
+       The timer introduces realistic reaction lag.  Hot form → shorter delay
+       (quicker reactions).  Cold form → longer delay (sluggish reactions).   */
 
     this.decisionTimer -= deltaMs;
 
     if (this.decisionTimer <= 0)
     {
       const { reactionDelayMin, reactionDelayMax, targetOffsetMax, predictionMode } = this.config;
+      const fi = this.config.formInfluence;
+      const f  = this.form;                   // [-1, +1]
 
-      /* Randomize the next recalculation window. */
-      this.decisionTimer =
-        reactionDelayMin + Math.random() * (reactionDelayMax - reactionDelayMin);
+      /* ── Compute effective parameters from form ── */
+
+      /* Reaction delay: hot form shortens it; cold form lengthens it. */
+      const delayMult  = 1 - f * fi * 0.45;
+      const effDelayMin = Math.max(20,  reactionDelayMin * delayMult);
+      const effDelayMax = Math.max(effDelayMin + 10, Math.min(700, reactionDelayMax * delayMult));
+
+      /* Aiming error: hot form shrinks it; cold form grows it. */
+      const effError = Math.max(2, targetOffsetMax * (1 + (-f) * fi * 0.80));
+
+      /* ── Reset decision timer ── */
+      this.decisionTimer = effDelayMin + Math.random() * (effDelayMax - effDelayMin);
 
       /* ── Predict ball arrival Y ── */
       let predictedY: number;
@@ -214,14 +314,23 @@ export class AIController
         predictedY = this.predictBallY(ball, paddle.x, predictionMode === 'spin');
       }
 
+      /* ── False read: occasionally commit to the wrong side when cold ──────
+         Fires only during cold streaks (form < 0).  Probability scales from
+         0% (neutral form) up to falseReadChance * 100% (maximally cold).
+         Simulates misreading spin direction or misjudging a bounce angle —
+         the AI confidently chases the wrong position.                        */
+      const coldDepth    = Math.max(0, -f);
+      const falseReadPct = this.config.falseReadChance * coldDepth;
+
+      if (Math.random() < falseReadPct)
+      {
+        predictedY = CANVAS_HEIGHT - predictedY;
+      }
+
       /* ── Add aiming error ── */
-      /* Random error in [-targetOffsetMax, +targetOffsetMax].
-         Larger error = AI misses more (Easy).  Smaller = near-perfect (Hard). */
-      const error = (Math.random() - 0.5) * 2 * targetOffsetMax;
+      const error = (Math.random() - 0.5) * 2 * effError;
 
       /* ── Compute target top edge of paddle, clamped to screen ── */
-      /* We aim the CENTER of the paddle at predictedY, so subtract half height.
-         Clamp so the paddle can't leave the court.                           */
       this.targetY = Math.max(
         0,
         Math.min(
@@ -231,17 +340,19 @@ export class AIController
       );
     }
 
-    /* ── Step 2: Track toward targetY each frame ───────────────────────────
+    /* ── Step 2: Track toward targetY at form-modulated speed ──────────────
+       Hot form raises the effective speed cap; cold form lowers it.
        Uses the same acceleration + deceleration curve as the human paddle
-       so the AI paddle "feels" like the player's paddle, just AI-controlled.
+       so the AI feels like a real opponent, not a smoothly-interpolated robot. */
 
-       diff = how far we still need to travel.  Positive = need to move down.
-       If |diff| > 2px → accelerate toward target.
-       If |diff| ≤ 2px → we're close enough; use the decel curve to stop.  */
+    const dt = deltaMs / 1000;
 
-    const dt      = deltaMs / 1000;                          // convert ms → seconds
-    const maxSpeed = PADDLE_BASE_SPEED * this.config.speedFactor;
-    const diff    = this.targetY - paddle.y;
+    /* Effective speed: hot form boosts it; cold form reduces it. */
+    const fi = this.config.formInfluence;
+    const f  = this.form;
+    const effSpeed    = Math.max(0.25, Math.min(1.0, this.config.speedFactor * (1 + f * fi * 0.35)));
+    const maxSpeed    = PADDLE_BASE_SPEED * effSpeed;
+    const diff        = this.targetY - paddle.y;
 
     /* Record previous Y for spin-impartment calculation in physics. */
     paddle.prevY = paddle.y;
@@ -254,15 +365,11 @@ export class AIController
     }
     else
     {
-      /* Decelerate using the same power-curve as the player paddle.
-         speedNorm = current speed as a fraction of max speed (0–1).
-         t         = power-curve weight (spends more time near FAST end).
-         decel     = blend of DECEL_FAST (at speed) and DECEL_SLOW (near stop). */
+      /* Decelerate using the same power-curve as the player paddle. */
       const speedNorm = Math.abs(paddle.vy) / maxSpeed;
       const t         = Math.pow(speedNorm, PADDLE_DECEL_CURVE);
       paddle.vy      *= PADDLE_DECEL_SLOW + (PADDLE_DECEL_FAST - PADDLE_DECEL_SLOW) * t;
 
-      /* Snap to zero to avoid micro-oscillation at very low velocities. */
       if (Math.abs(paddle.vy) < 1) paddle.vy = 0;
     }
 
@@ -278,12 +385,10 @@ export class AIController
    * @description Simulates the ball's trajectory step-by-step to estimate
    *              where it will cross a given X position (the AI paddle's face).
    *
-   * The simulation runs at 60fps time steps.  It simulates up to 400 steps
-   * (≈ 6.7 seconds of game time) which is more than enough to predict any
-   * realistic trajectory.
+   * The simulation runs at 60fps time steps for up to 400 steps (≈ 6.7 seconds),
+   * which is more than enough to predict any realistic trajectory.
    *
-   * Wall bounces are handled by reflecting vy when the ball would exit the
-   * top or bottom boundary, exactly matching the actual physics engine.
+   * Wall bounces are handled by reflecting vy, exactly matching the physics engine.
    *
    * @param ball      Current ball state.
    * @param targetX   The X position to predict arrival at (paddle face X).
@@ -292,19 +397,18 @@ export class AIController
    */
   private predictBallY(ball: Ball, targetX: number, withSpin: boolean): number
   {
-    /* If the ball is moving away from the AI (vx ≤ 0), there is no useful
-       prediction to make.  Return centre so the paddle idles in a neutral
-       position waiting for the ball to come back.                          */
+    /* If the ball is moving away from the AI (vx ≤ 0), return centre so the
+       paddle idles in a neutral ready position.                              */
     if (ball.vx <= 0) return CANVAS_HEIGHT / 2;
 
     /* ── Initialize simulation state ── */
     let x    = ball.x;
     let y    = ball.y;
     let vy   = ball.vy;
-    const vx = ball.vx;                         // vx is constant (no friction)
+    const vx = ball.vx;
     const r  = ball.radius;
-    const step = 1 / 60;                        // one frame at 60fps (seconds)
-    let spin = withSpin ? ball.spin : 0;        // start with actual spin if Hard
+    const step = 1 / 60;
+    let spin = withSpin ? ball.spin : 0;
 
     /* ── Step through time until the ball reaches targetX ── */
     for (let i = 0; i < 400 && x < targetX; i++)
@@ -313,10 +417,10 @@ export class AIController
       if (withSpin)
       {
         vy   += SPIN_CURVE_FORCE * spin * step;
-        spin *= 1 - SPIN_DECAY_PER_S * step;    // exponential spin decay
+        spin *= 1 - SPIN_DECAY_PER_S * step;
       }
 
-      /* Advance position by one step. */
+      /* Advance position. */
       x += vx * step;
       y += vy * step;
 
@@ -324,13 +428,13 @@ export class AIController
       if (y - r < 0)
       {
         y  = r;
-        vy = Math.abs(vy);                      // reflect downward
+        vy = Math.abs(vy);
       }
       /* Wall bounce: bottom boundary. */
       else if (y + r > CANVAS_HEIGHT)
       {
         y  = CANVAS_HEIGHT - r;
-        vy = -Math.abs(vy);                     // reflect upward
+        vy = -Math.abs(vy);
       }
     }
 
@@ -339,16 +443,14 @@ export class AIController
 
   /**
    * @method reset
-   * @description Resets AI state to safe defaults.
-   *              Called by configure() when a new match begins, and can be
-   *              called directly to clear state mid-match if needed.
+   * @description Resets targetY and decisionTimer to safe defaults.
+   *              Called by configure() when a new match begins.
+   *              Does NOT reset form — that is configure()'s responsibility,
+   *              keeping reset() focused on positional / timer state only.
    */
   reset(): void
   {
-    /* Start in the middle of the court — neutral ready position. */
     this.targetY       = CANVAS_HEIGHT / 2;
-
-    /* 0 forces an immediate recalculation on the first update() call. */
     this.decisionTimer = 0;
   }
 }

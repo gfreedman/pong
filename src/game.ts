@@ -1326,6 +1326,9 @@ export class Game
         this.servingToward = true;  // P1 conceded → serve toward P1 next
       }
 
+      /* Notify AI of the result — updates its hot/cold form factor. */
+      this.ai.notifyGoal(result.goal as 1 | 2);
+
       /* Exhale duration scales with the rally that just ended. */
       const extraMs  = Math.min(state.rallyCount * EXHALE_PER_RALLY_HIT, EXHALE_EXTRA_CAP_MS);
       const exhaleMs = EXHALE_BASE_MS + extraMs;
