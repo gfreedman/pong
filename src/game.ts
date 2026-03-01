@@ -299,6 +299,7 @@ export class Game
   constructor(canvas: HTMLCanvasElement)
   {
     this.input    = new InputManager();
+    this.input.attachTouch(canvas);
     this.audio    = new AudioManager();
     this.renderer = new Renderer(canvas);
     this.ai       = new AIController();
@@ -561,7 +562,7 @@ export class Game
   {
     this.servePendingTimer += deltaMs;
 
-    const playerReady = this.input.p1Up() || this.input.p1Down();
+    const playerReady = this.input.p1Up() || this.input.p1Down() || this.input.confirm();
     const aiReady     = this.servePendingTimer >= SERVE_PENDING_AI_MS;
 
     if (playerReady || aiReady)

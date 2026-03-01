@@ -40,6 +40,25 @@ export class InputManager
   /** Keys that transitioned up THIS frame. Cleared by flush(). */
   private justReleased = new Set<string>();
 
+  /* ── Touch state ──────────────────────────────────────────────────────────
+     Tracks a single finger for paddle control (continuous drag) and taps
+     (single-fire confirm).  All values are in CSS pixels.                   */
+
+  /** clientY where the finger first touched down; null when no touch active. */
+  private touchY0: number | null = null;
+
+  /** clientX where the finger first touched down; used for tap detection. */
+  private touchX0: number | null = null;
+
+  /** Current clientY of the tracked finger. */
+  private touchY: number | null = null;
+
+  /** True on the frame a tap (small-movement touchend) is detected. Cleared by flush(). */
+  private touchTapped = false;
+
+  /** Drag must exceed this (px) before the paddle registers a direction. */
+  private readonly TOUCH_DEADZONE = 8;
+
   /* ── Constructor ─────────────────────────────────────────────────────────
      Register global listeners immediately so no input is missed.            */
 
@@ -78,6 +97,47 @@ export class InputManager
       this.held.delete(e.key);
       this.justReleased.add(e.key);
     });
+  }
+
+  /**
+   * @method attachTouch
+   * @description Wires touch events on the given element for mobile paddle control.
+   *              Call once from Game, passing the canvas element.
+   *
+   *              - touchstart / touchmove  → update drag delta for p1Up / p1Down
+   *              - touchend (small motion) → set touchTapped flag for confirm()
+   *
+   * @param el  Element to attach listeners to (the game canvas).
+   */
+  attachTouch(el: HTMLElement): void
+  {
+    el.addEventListener('touchstart', (e) =>
+    {
+      e.preventDefault();
+      const t      = e.touches[0];
+      this.touchY0 = t.clientY;
+      this.touchY  = t.clientY;
+      this.touchX0 = t.clientX;
+    }, { passive: false });
+
+    el.addEventListener('touchmove', (e) =>
+    {
+      e.preventDefault();
+      this.touchY = e.touches[0].clientY;
+    }, { passive: false });
+
+    el.addEventListener('touchend', (e) =>
+    {
+      if (this.touchY0 !== null && this.touchX0 !== null)
+      {
+        const dy = Math.abs((this.touchY ?? this.touchY0) - this.touchY0);
+        const dx = Math.abs((e.changedTouches[0]?.clientX ?? this.touchX0) - this.touchX0);
+        if (dy < 20 && dx < 20) this.touchTapped = true;
+      }
+      this.touchY0 = null;
+      this.touchX0 = null;
+      this.touchY  = null;
+    }, { passive: false });
   }
 
   /* ── Core query methods ───────────────────────────────────────────────────
@@ -134,6 +194,7 @@ export class InputManager
   {
     this.justPressed.clear();
     this.justReleased.clear();
+    this.touchTapped = false;
   }
 
   /* ── Player 1 movement ────────────────────────────────────────────────────
@@ -147,6 +208,8 @@ export class InputManager
    */
   p1Up(): boolean
   {
+    if (this.touchY0 !== null && this.touchY !== null &&
+        this.touchY - this.touchY0 < -this.TOUCH_DEADZONE) return true;
     return this.isDown('w') || this.isDown('W') || this.isDown('ArrowUp');
   }
 
@@ -158,6 +221,8 @@ export class InputManager
    */
   p1Down(): boolean
   {
+    if (this.touchY0 !== null && this.touchY !== null &&
+        this.touchY - this.touchY0 > this.TOUCH_DEADZONE) return true;
     return this.isDown('s') || this.isDown('S') || this.isDown('ArrowDown');
   }
 
@@ -201,7 +266,7 @@ export class InputManager
    *              Used on the serve screen and in menus.
    * @returns {boolean}
    */
-  confirm(): boolean { return this.wasPressed('Enter') || this.wasPressed(' '); }
+  confirm(): boolean { return this.wasPressed('Enter') || this.wasPressed(' ') || this.touchTapped; }
 
   /**
    * @method menuUp

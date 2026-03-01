@@ -37,6 +37,27 @@ function main(): void
      the correct width from the moment they initialise.                  */
   setCanvasWidth(window.innerWidth, window.innerHeight);
 
+  /* ── Mobile: orientation lock + reload safety net ─────────────────────
+     Request landscape lock so the OS rotates the game automatically.
+     iOS Safari ignores lock() — the CSS rotate-prompt handles that case.
+     On any orientation change, reload so the canvas reinitialises with
+     the correct dimensions.                                             */
+  const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+    || ('ontouchstart' in window)
+    || (navigator.maxTouchPoints > 1);
+
+  if (isMobile)
+  {
+    (screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> })
+      ?.lock?.('landscape')
+      ?.catch(() => { /* iOS: CSS rotate-prompt is the fallback */ });
+
+    window.addEventListener('orientationchange', () =>
+    {
+      setTimeout(() => window.location.reload(), 150);
+    });
+  }
+
   /* ── Step 3: Create and start the game ───────────────────────────────
      Game owns the entire state machine, game loop, and all subsystems.  */
   const game = new Game(canvas);

@@ -68,11 +68,10 @@ body
 #game-canvas
 {
   display: block;
-  /* Canvas fills the full viewport — the Renderer handles the
-     contain-scale internally and extends the background to all edges,
-     so there are no bars regardless of viewport aspect ratio. */
   width: 100vw;
   height: 100vh;
+  /* Prevent browser scroll/zoom from swallowing touch events during play. */
+  touch-action: none;
 }
 
 
@@ -1178,6 +1177,86 @@ body
   opacity: 0.45;
   text-align: center;
   letter-spacing: 0.05em;
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   TOUCH — prevent 300 ms tap delay and double-tap zoom on buttons
+   ══════════════════════════════════════════════════════════════ */
+
+.btn-diff,
+.btn-end,
+.btn-pause,
+.god-mode-toggle,
+.htp-close
+{
+  touch-action: manipulation;
+  /* Comfortable tap targets on mobile */
+  min-height: 52px;
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   ROTATE PROMPT
+   Shown only on portrait touch devices via media query.
+   ══════════════════════════════════════════════════════════════ */
+
+#rotate-prompt
+{
+  display: none; /* hidden by default — JS not required */
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: var(--bg);
+  align-items: center;
+  justify-content: center;
+}
+
+/* Only appear on portrait-orientation touch devices */
+@media (orientation: portrait) and (hover: none) and (pointer: coarse)
+{
+  #rotate-prompt
+  {
+    display: flex;
+  }
+}
+
+.rotate-card
+{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 2.5rem 2rem;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 20px;
+}
+
+.rotate-icon
+{
+  font-size: 3.5rem;
+  line-height: 1;
+  color: var(--p1);
+  animation: rotate-hint 2s ease-in-out infinite;
+  filter: drop-shadow(0 0 12px rgba(0, 240, 255, 0.55));
+}
+
+@keyframes rotate-hint
+{
+  0%   { transform: rotate(0deg); }
+  40%  { transform: rotate(90deg); }
+  60%  { transform: rotate(90deg); }
+  100% { transform: rotate(90deg); }
+}
+
+.rotate-label
+{
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  text-align: center;
 }
 
 

@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <meta name="description" content="Neon Pong — neon-lit arcade Pong with spin physics, rally escalation, and a formidable AI.">
   <title>NEON PONG</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=9" />
+  <link rel="stylesheet" href="style.css?v=10" />
 </head>
 <body>
 
@@ -253,6 +253,14 @@
         <button class="btn-end btn-ghost" data-end="1">Main Menu</button>
       </div>
       <p class="controls-hint">W / S to choose &nbsp;·&nbsp; Enter to confirm</p>
+    </div>
+  </div>
+
+  <!-- ── Rotate prompt (shown by CSS on portrait mobile, hidden otherwise) ── -->
+  <div id="rotate-prompt" aria-hidden="true">
+    <div class="rotate-card">
+      <div class="rotate-icon">↻</div>
+      <p class="rotate-label">Rotate to landscape to play</p>
     </div>
   </div>
 
