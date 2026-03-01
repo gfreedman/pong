@@ -348,14 +348,14 @@ export class Renderer
   private drawCourt(intensity = 1, courtColor = COLOR_P1): void
   {
     const { ctx } = this;
-    const alpha = Math.min(0.18 * intensity, 0.55);
+    const alpha = Math.min(0.30 * intensity, 0.72);
 
     /* ── Dashed center line ── */
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.strokeStyle = courtColor;
     ctx.shadowColor = courtColor;
-    ctx.shadowBlur  = intensity > 1.5 ? (intensity - 1) * 16 : 0;
+    ctx.shadowBlur  = 5 + (intensity > 1.5 ? (intensity - 1) * 16 : 0);
     ctx.lineWidth   = 2;
     ctx.setLineDash([12, 14]);
     ctx.beginPath();
@@ -370,7 +370,7 @@ export class Renderer
     ctx.globalAlpha = alpha;
     ctx.strokeStyle = courtColor;
     ctx.shadowColor = courtColor;
-    ctx.shadowBlur  = intensity > 1.5 ? (intensity - 1) * 10 : 0;
+    ctx.shadowBlur  = 5 + (intensity > 1.5 ? (intensity - 1) * 10 : 0);
     ctx.lineWidth   = 1.5;
     ctx.beginPath();
     ctx.arc(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, 60, 0, Math.PI * 2);

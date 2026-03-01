@@ -30,37 +30,10 @@ function main(): void
   }
 
   /* ── Step 2: Responsive scaling ───────────────────────────────────────
-     We want the game to fill as much of the screen as possible without
-     distortion.  The trick: try filling full width, check if the height
-     fits, and if not constrain by height instead.                       */
-
-  /**
-   * @function resize
-   * @description Recalculates the CSS display dimensions of the canvas so it
-   *              fills the viewport at a 16:9 ratio. Called on startup and on
-   *              every window resize event.
-   *
-   *              This only affects how large the canvas *looks* on screen.
-   *              The drawing buffer stays at 960 × 540 logical pixels regardless.
-   */
-  function resize(): void
-  {
-    const vw    = window.innerWidth;
-    const ratio = 960 / 540;   // 16 ÷ 9 ≈ 1.778
-
-    /* Always fill the full viewport width.  The canvas height follows the
-       16:9 ratio and may exceed window.innerHeight on short viewports (e.g.
-       a 16:9 monitor with browser chrome).  body { overflow: hidden } clips
-       the excess vertically so no scrollbars or layout shift occur.
-       This guarantees zero black pillars on the left or right, on every
-       screen and browser configuration.                                    */
-    canvas!.style.width  = `${vw}px`;
-    canvas!.style.height = `${(vw / ratio).toFixed(1)}px`;
-  }
-
-  /* Apply sizing immediately, then re-apply whenever the window changes */
-  resize();
-  window.addEventListener('resize', resize);
+     Handled entirely by CSS: style.css sets
+       width: min(100vw, calc(100vh * 16 / 9)); aspect-ratio: 16 / 9;
+     This is a CSS-native contain calculation — no JS inline styles needed,
+     so there is no JS/CSS fight on any viewport shape.                  */
 
   /* ── Step 3: Create and start the game ───────────────────────────────
      Game owns the entire state machine, game loop, and all subsystems.  */
