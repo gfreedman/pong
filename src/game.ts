@@ -271,6 +271,11 @@ export class Game
   /** Rising-edge latch: prevents the toggle firing every frame while keys are held. */
   private goatKeysWereAllDown = false;
 
+  /* ── Canvas reference ───────────────────────────────────────────────── */
+
+  /** Kept so we can request fullscreen and pass to renderer.handleResize(). */
+  private canvas: HTMLCanvasElement;
+
   /* ── HTML overlay DOM references ─────────────────────────────────────── */
 
   private difficultyOverlay!: HTMLElement;
@@ -298,6 +303,7 @@ export class Game
    */
   constructor(canvas: HTMLCanvasElement)
   {
+    this.canvas   = canvas;
     this.input    = new InputManager();
     this.input.attachTouch(canvas);
     this.audio    = new AudioManager();
@@ -351,6 +357,17 @@ export class Game
 
     this.setupOverlayEvents();
     this.showDifficultyOverlay();
+
+    /* Resize the renderer whenever the browser enters or exits fullscreen.
+       Handles both the standard API and Safari's webkit-prefixed version.  */
+    const onFullscreenChange = (): void =>
+    {
+      const fsEl = document.fullscreenElement
+        ?? (document as Document & { webkitFullscreenElement?: Element }).webkitFullscreenElement;
+      if (fsEl) this.renderer.handleResize(this.canvas);
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
   }
 
   /* ── Public lifecycle ──────────────────────────────────────────────── */
@@ -870,6 +887,24 @@ export class Game
     this.ai.configure(this.difficulty);
     this.audio.playMenuConfirm();
     this.hideDifficultyOverlay();
+
+    /* On touch devices request fullscreen — must be called inside a user
+       gesture handler (click / Enter), which it always is here.
+       The fullscreenchange listener in the constructor calls handleResize
+       once the browser finishes the transition.
+       startMatch() runs immediately; the first frames render at the old
+       size then snap to fullscreen when the event fires (~100 ms).
+       iOS Safari ignores requestFullscreen silently — the 100dvh CSS rule
+       is the fallback for that platform.                                 */
+    if (window.matchMedia('(hover: none) and (pointer: coarse)').matches)
+    {
+      const el = document.documentElement as HTMLElement & {
+        webkitRequestFullscreen?: () => Promise<void> | void;
+      };
+      const req = el.requestFullscreen ?? el.webkitRequestFullscreen;
+      req?.call(el)?.catch?.(() => { /* declined — no-op */ });
+    }
+
     this.startMatch();
   }
 
@@ -1081,13 +1116,26 @@ export class Game
 
     p1.prevY = p1.y;
 
-    const p1Up   = input.p1Up();
-    const p1Down = input.p1Down();
-
     /* SPEED_BOOTS scales both max speed and acceleration multiplier. */
     const speedBoost1 = this.hasBoost(1, 'SPEED_BOOTS');
     const p1MaxSpeed  = PADDLE_BASE_SPEED * (speedBoost1 ? POWERUP_SPEED_FACTOR      : 1);
     const p1Accel     = PADDLE_ACCEL      * (speedBoost1 ? POWERUP_SPEED_ACCEL_FACTOR : 1);
+
+    /* Touch: move the paddle center directly to the finger.
+       This feels like dragging it — no deadzone lag, instant response.
+       Derive p1.vy from the position delta so spin still works correctly. */
+    const fingerCSS = input.touchAbsY();
+    if (fingerCSS !== null)
+    {
+      const gameY = (fingerCSS / window.innerHeight) * CANVAS_HEIGHT;
+      const newY  = Math.max(0, Math.min(CANVAS_HEIGHT - p1.height, gameY - p1.height / 2));
+      p1.vy = Math.max(-p1MaxSpeed, Math.min(p1MaxSpeed, (newY - p1.y) / Math.max(dt, 0.001)));
+      p1.y  = newY;
+      return;
+    }
+
+    const p1Up   = input.p1Up();
+    const p1Down = input.p1Down();
 
     if (p1Up && !p1Down)
     {

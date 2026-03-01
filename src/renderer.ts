@@ -197,6 +197,38 @@ export class Renderer
     this.gameScale  = scale;
   }
 
+  /**
+   * @method handleResize
+   * @description Updates the canvas pixel buffer and recomputes the game
+   *              transform to match the current viewport size.
+   *
+   *              Call after the fullscreen transition completes (or any
+   *              viewport resize) so the renderer's internal dimensions
+   *              stay in sync with window.innerWidth / innerHeight.
+   *
+   * @param canvas  The same <canvas> element passed to the constructor.
+   */
+  handleResize(canvas: HTMLCanvasElement): void
+  {
+    const dpr = window.devicePixelRatio || 1;
+    const vw  = window.innerWidth;
+    const vh  = window.innerHeight;
+
+    canvas.width  = vw * dpr;
+    canvas.height = vh * dpr;
+
+    /* Reset the transform to identity, then re-apply the DPR scale.
+       setTransform avoids stacking scale() calls across multiple resizes. */
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const scale    = Math.min(vw / CANVAS_WIDTH, vh / CANVAS_HEIGHT);
+    this.vpW       = vw;
+    this.vpH       = vh;
+    this.gameOffX  = (vw - CANVAS_WIDTH  * scale) / 2;
+    this.gameOffY  = (vh - CANVAS_HEIGHT * scale) / 2;
+    this.gameScale = scale;
+  }
+
   /* ═══════════════════════════════════════════════════════════════════════
      TOP-LEVEL DRAW
      Called once per frame. Orchestrates all layer drawing.

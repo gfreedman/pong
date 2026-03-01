@@ -197,6 +197,17 @@ export class InputManager
     this.touchTapped = false;
   }
 
+  /**
+   * @method touchAbsY
+   * @description Returns the current touch Y position in CSS pixels,
+   *              or null when no finger is on screen.
+   *              Used by Game to map the finger directly to paddle position.
+   */
+  touchAbsY(): number | null
+  {
+    return this.touchY;
+  }
+
   /* ── Player 1 movement ────────────────────────────────────────────────────
      P1 (left paddle) uses W/S or ArrowUp/ArrowDown.                         */
 
