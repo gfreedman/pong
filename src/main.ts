@@ -12,6 +12,7 @@
  */
 
 import { Game } from './game.js';
+import { setCanvasWidth } from './constants.js';
 
 /**
  * @function main
@@ -29,11 +30,12 @@ function main(): void
     return;
   }
 
-  /* ── Step 2: Responsive scaling ───────────────────────────────────────
-     Handled entirely by CSS: style.css sets
-       width: min(100vw, calc(100vh * 16 / 9)); aspect-ratio: 16 / 9;
-     This is a CSS-native contain calculation — no JS inline styles needed,
-     so there is no JS/CSS fight on any viewport shape.                  */
+  /* ── Step 2: Lock canvas width to the actual viewport aspect ratio ───
+     CANVAS_HEIGHT is fixed at 540.  CANVAS_WIDTH is computed here so the
+     game coordinate space is exactly viewport-shaped — no bars, no clip,
+     on any display.  Must run before new Game() so all subsystems see
+     the correct width from the moment they initialise.                  */
+  setCanvasWidth(window.innerWidth, window.innerHeight);
 
   /* ── Step 3: Create and start the game ───────────────────────────────
      Game owns the entire state machine, game loop, and all subsystems.  */

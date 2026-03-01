@@ -172,8 +172,8 @@ export class Renderer
    */
   constructor(canvas: HTMLCanvasElement)
   {
-    /* The canvas fills the full viewport (set by CSS).  The pixel buffer
-       matches the physical viewport so no CSS/JS size fight is possible.  */
+    /* CANVAS_WIDTH was set by setCanvasWidth() before this constructor runs,
+       so game coords exactly match the viewport aspect ratio.              */
     const dpr = window.devicePixelRatio || 1;
     const vw  = window.innerWidth;
     const vh  = window.innerHeight;
@@ -185,18 +185,15 @@ export class Renderer
     if (!ctx) throw new Error('Could not get 2D context');
     this.ctx = ctx;
 
-    /* Apply DPR as the base transform. */
     ctx.scale(dpr, dpr);
 
-    /* Compute the transform that centers and contains the 960×540 game area
-       within the full viewport.  All game drawing uses 960×540 coordinates;
-       this scale+offset maps them into the visible viewport so the background
-       can extend edge-to-edge with no bars on any aspect ratio.            */
-    const scale     = Math.min(vw / CANVAS_WIDTH, vh / CANVAS_HEIGHT);
-    this.vpW        = vw;
-    this.vpH        = vh;
-    this.gameOffX   = (vw - CANVAS_WIDTH  * scale) / 2;
-    this.gameOffY   = (vh - CANVAS_HEIGHT * scale) / 2;
+    /* Because CANVAS_WIDTH = CANVAS_HEIGHT * (vw/vh), the scale is uniform
+       and both offsets are ≈ 0 — game fills viewport with no bars.        */
+    const scale   = Math.min(vw / CANVAS_WIDTH, vh / CANVAS_HEIGHT);
+    this.vpW      = vw;
+    this.vpH      = vh;
+    this.gameOffX = (vw - CANVAS_WIDTH  * scale) / 2;
+    this.gameOffY = (vh - CANVAS_HEIGHT * scale) / 2;
     this.gameScale  = scale;
   }
 

@@ -26,11 +26,26 @@
    CSS scaling in main.ts makes this fill any viewport without distortion.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/** Logical canvas width in pixels.  Do NOT change — all positions are relative to this. */
-export const CANVAS_WIDTH  = 960;
-
-/** Logical canvas height in pixels. Do NOT change — all positions are relative to this. */
+/** Logical canvas height in pixels — fixed at 540. */
 export const CANVAS_HEIGHT = 540;
+
+/**
+ * Logical canvas width — set at startup by setCanvasWidth() to match the
+ * viewport's actual aspect ratio.  All game systems use this live value so
+ * the play field fills the screen with zero bars on any display.
+ */
+export let CANVAS_WIDTH = 960;
+
+/**
+ * Call once in main(), before new Game(), to lock the canvas width to the
+ * viewport's aspect ratio.  CANVAS_HEIGHT stays fixed at 540; only the
+ * width is adjusted so the game coordinate space is always exactly
+ * viewport-shaped.
+ */
+export function setCanvasWidth(viewportW: number, viewportH: number): void
+{
+  CANVAS_WIDTH = Math.round(CANVAS_HEIGHT * viewportW / viewportH);
+}
 
 /** Target frames per second.  Used to size pre-allocated arrays and time-step sanity checks. */
 export const TARGET_FPS    = 60;
