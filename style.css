@@ -68,12 +68,11 @@ body
 #game-canvas
 {
   display: block;
-  /* CSS-native contain scaling — no JS inline styles needed.
-     width = smaller of: full viewport width, OR the width that fills
-     full viewport height at 16:9.  aspect-ratio derives height from width.
-     Eliminates any JS/CSS fight and handles all viewport shapes correctly. */
-  width: min(100vw, calc(100vh * 16 / 9));
-  aspect-ratio: 16 / 9;
+  /* Canvas fills the full viewport — the Renderer handles the
+     contain-scale internally and extends the background to all edges,
+     so there are no bars regardless of viewport aspect ratio. */
+  width: 100vw;
+  height: 100vh;
 }
 
 

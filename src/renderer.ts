@@ -138,6 +138,15 @@ export class Renderer
   /** The 2D rendering context — all drawing happens through this object. */
   private ctx: CanvasRenderingContext2D;
 
+  /** Full viewport dimensions (CSS pixels), used to fill background edge-to-edge. */
+  private vpW: number;
+  private vpH: number;
+
+  /** Transform that centers and scales the 960×540 game area within the viewport. */
+  private gameOffX: number;
+  private gameOffY: number;
+  private gameScale: number;
+
   /* ── Constructor ─────────────────────────────────────────────────────── */
 
   /**
@@ -153,18 +162,32 @@ export class Renderer
    */
   constructor(canvas: HTMLCanvasElement)
   {
-    /* Scale the buffer to physical pixels for crisp rendering on high-DPI screens. */
+    /* The canvas fills the full viewport (set by CSS).  The pixel buffer
+       matches the physical viewport so no CSS/JS size fight is possible.  */
     const dpr = window.devicePixelRatio || 1;
-    canvas.width  = CANVAS_WIDTH  * dpr;
-    canvas.height = CANVAS_HEIGHT * dpr;
+    const vw  = window.innerWidth;
+    const vh  = window.innerHeight;
+
+    canvas.width  = vw * dpr;
+    canvas.height = vh * dpr;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Could not get 2D context');
     this.ctx = ctx;
 
-    /* Apply DPR as the base transform.  ctx.save()/restore() is a stack, so
-       all nested pairs restore back to this scale — never to identity.     */
+    /* Apply DPR as the base transform. */
     ctx.scale(dpr, dpr);
+
+    /* Compute the transform that centers and contains the 960×540 game area
+       within the full viewport.  All game drawing uses 960×540 coordinates;
+       this scale+offset maps them into the visible viewport so the background
+       can extend edge-to-edge with no bars on any aspect ratio.            */
+    const scale     = Math.min(vw / CANVAS_WIDTH, vh / CANVAS_HEIGHT);
+    this.vpW        = vw;
+    this.vpH        = vh;
+    this.gameOffX   = (vw - CANVAS_WIDTH  * scale) / 2;
+    this.gameOffY   = (vh - CANVAS_HEIGHT * scale) / 2;
+    this.gameScale  = scale;
   }
 
   /* ═══════════════════════════════════════════════════════════════════════
@@ -200,6 +223,27 @@ export class Renderer
     const { ctx } = this;
     const rc = state.rallyCount;
 
+    /* ── Background warmth (computed once, used for both fills) ──────────
+       Warms subtly toward red at Dramatic+ (subliminal tension).         */
+    const warmth = rc >= RALLY_TIER_DRAMATIC
+      ? Math.min((rc - RALLY_TIER_DRAMATIC) / 12, 1)
+      : 0;
+
+    /* ── Full-viewport background fill ───────────────────────────────────
+       Paint the entire canvas (including any area outside the 960×540
+       game zone) before applying the game transform.  This eliminates
+       all side / top / bottom bars regardless of viewport aspect ratio.  */
+    const bgR = Math.round(10 + warmth * 5);
+    ctx.fillStyle = `rgb(${bgR},10,46)`;
+    ctx.fillRect(0, 0, this.vpW, this.vpH);
+
+    /* ── Game area transform ─────────────────────────────────────────────
+       All game content is drawn in 960×540 logical coordinates.
+       This transform centers and scales that space into the full viewport. */
+    ctx.save(); // GAME TRANSFORM
+    ctx.translate(this.gameOffX, this.gameOffY);
+    ctx.scale(this.gameScale, this.gameScale);
+
     /* ── Rally zoom ─────────────────────────────────────────────────────
        Subtle "TV camera push-in" centered on canvas midpoint.
        Zoom value is extra scale on top of 1.0 (e.g. 0.025 → 1.025×).  */
@@ -216,11 +260,7 @@ export class Renderer
     ctx.save(); // SHAKE LAYER
     ctx.translate(shakeX, shakeY);
 
-    /* ── Background ─────────────────────────────────────────────────────
-       Background warms subtly toward red at Dramatic+ (subliminal tension). */
-    const warmth = rc >= RALLY_TIER_DRAMATIC
-      ? Math.min((rc - RALLY_TIER_DRAMATIC) / 12, 1)
-      : 0;
+    /* ── Background (game area) ── */
     this.drawBackground(warmth);
     this.drawWallMarks(state.wallMarks);
 
@@ -310,6 +350,8 @@ export class Renderer
     {
       this.drawEdgePulse(rc);
     }
+
+    ctx.restore(); // END GAME TRANSFORM
   }
 
   /* ═══════════════════════════════════════════════════════════════════════
