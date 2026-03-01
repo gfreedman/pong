@@ -185,34 +185,6 @@ export class InputManager
     return this.isDown('ArrowDown');
   }
 
-  /* ── Ability bindings (reserved for future phases) ───────────────────────
-     These are single-fire (wasPressed) so abilities activate once per tap,
-     not continuously while held.                                            */
-
-  /** @method p1Turbo  @description P1 turbo-shot key (E). @returns {boolean} */
-  p1Turbo(): boolean { return this.wasPressed('e') || this.wasPressed('E'); }
-
-  /** @method p1Slow   @description P1 slow-field key (Q). @returns {boolean} */
-  p1Slow():  boolean { return this.wasPressed('q') || this.wasPressed('Q'); }
-
-  /** @method p1Curve  @description P1 curve-shot key (R). @returns {boolean} */
-  p1Curve(): boolean { return this.wasPressed('r') || this.wasPressed('R'); }
-
-  /** @method p1Shield @description P1 shield key (F). @returns {boolean} */
-  p1Shield(): boolean { return this.wasPressed('f') || this.wasPressed('F'); }
-
-  /** @method p2Turbo  @description P2 turbo-shot key (L). @returns {boolean} */
-  p2Turbo(): boolean { return this.wasPressed('l') || this.wasPressed('L'); }
-
-  /** @method p2Slow   @description P2 slow-field key (K). @returns {boolean} */
-  p2Slow():  boolean { return this.wasPressed('k') || this.wasPressed('K'); }
-
-  /** @method p2Curve  @description P2 curve-shot key (;). @returns {boolean} */
-  p2Curve(): boolean { return this.wasPressed(';'); }
-
-  /** @method p2Shield @description P2 shield key ('). @returns {boolean} */
-  p2Shield(): boolean { return this.wasPressed("'"); }
-
   /* ── System / menu keys ──────────────────────────────────────────────────
      Single-fire so Escape doesn't toggle pause 60 times per second.        */
 

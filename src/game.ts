@@ -59,6 +59,7 @@ import
   POWERUP_BOOST_MS, POWERUP_RADIUS, POWERUP_WIDE_FACTOR, POWERUP_SPEED_FACTOR,
   POWERUP_STICKY_HOLD_MS, POWERUP_SPEED_ACCEL_FACTOR, POWERUP_TRAIL_SPEED_BONUS,
   COLOR_POWERUP_WIDE, COLOR_POWERUP_SPEED, COLOR_POWERUP_STICKY, COLOR_POWERUP_TRAIL,
+  GOAT_PADDLE_HEIGHT, GOAT_SPIN_AMOUNT, GOAT_SPEED_MULT, GOAT_BALL_MAX_SPEED,
 } from './constants.js';
 import { InputManager } from './input.js';
 import { AudioManager } from './audio.js';
@@ -261,6 +262,14 @@ export class Game
   /** When true, P1 always has all power-ups active at full strength. */
   private godMode = false;
 
+  /* ── GOAT Mode (secret) ──────────────────────────────────────────────── */
+
+  /** When true: P1 paddle = half-screen, every P1 hit → super spin + 4× speed. */
+  private goatMode = false;
+
+  /** Rising-edge latch: prevents the toggle firing every frame while keys are held. */
+  private goatKeysWereAllDown = false;
+
   /* ── HTML overlay DOM references ─────────────────────────────────────── */
 
   private difficultyOverlay!: HTMLElement;
@@ -425,6 +434,17 @@ export class Game
         return;
       }
     }
+
+    /* ── GOAT mode toggle: hold G + O + A + T simultaneously ───────────
+       Rising-edge detection prevents the flag from flipping every frame. */
+    const goatAllDown =
+      this.input.isDown('g') && this.input.isDown('o') &&
+      this.input.isDown('a') && this.input.isDown('t');
+    if (goatAllDown && !this.goatKeysWereAllDown)
+    {
+      this.goatMode = !this.goatMode;
+    }
+    this.goatKeysWereAllDown = goatAllDown;
 
     /* ── Phase dispatch ─────────────────────────────────────────────────
        Each phase has its own handler.  DIFFICULTY_SELECT and MATCH_END
@@ -990,13 +1010,13 @@ export class Game
    */
   private slidePaddlesToCenter(deltaMs: number): void
   {
-    const targetY = (CANVAS_HEIGHT - PADDLE_HEIGHT) / 2;
-
     /* k: exponential ease constant.  -6 → settles in ~0.5 seconds. */
     const k = 1 - Math.exp(-6 * deltaMs / 1000);
 
     for (const p of [this.state.player1, this.state.player2])
     {
+      /* Use actual paddle height so GOAT / WIDE_PADDLE paddles center correctly. */
+      const targetY = (CANVAS_HEIGHT - p.height) / 2;
       p.prevY  = p.y;
       p.y     += (targetY - p.y) * k;
       p.vy     = 0;
@@ -1236,6 +1256,24 @@ export class Game
           state.ball.speed = newMag;
         }
       }
+
+      /* ── GOAT mode: super spin + 4× speed on every P1 hit ── */
+      if (this.goatMode && result.hitPaddle === 1)
+      {
+        /* Spin direction follows paddle movement; default to topspin if stationary. */
+        const spinSign    = state.player1.vy !== 0 ? Math.sign(state.player1.vy) : 1;
+        state.ball.spin   = GOAT_SPIN_AMOUNT * spinSign;
+
+        /* Scale velocity to 4× and cap at GOAT_BALL_MAX_SPEED. */
+        const mag = Math.sqrt(state.ball.vx ** 2 + state.ball.vy ** 2);
+        if (mag > 0)
+        {
+          const newMag     = Math.min(mag * GOAT_SPEED_MULT, GOAT_BALL_MAX_SPEED);
+          state.ball.vx    = (state.ball.vx / mag) * newMag;
+          state.ball.vy    = (state.ball.vy / mag) * newMag;
+          state.ball.speed = newMag;
+        }
+      }
     }
 
     /* ── 4. Power-up orb collection ─────────────────────────────────────
@@ -1438,7 +1476,9 @@ export class Game
    */
   private resetMatch(): void
   {
-    this.ai.reset();
+    /* configure() resets form to 0 so a rematch starts with a neutral AI streak,
+       not one carried over from the last match.  It also calls reset() internally. */
+    this.ai.configure(this.difficulty);
     this.startMatch();
   }
 
@@ -1555,10 +1595,12 @@ export class Game
     /* Exponential lerp constant — settles in ~0.2 seconds at 60fps. */
     const k = 1 - Math.exp(-14 * deltaMs / 1000);
 
-    /* P1 WIDE_PADDLE: lerp toward boosted or normal height. */
-    const target1 = this.hasBoost(1, 'WIDE_PADDLE')
-      ? PADDLE_HEIGHT * POWERUP_WIDE_FACTOR
-      : PADDLE_HEIGHT;
+    /* P1 GOAT mode overrides height to half the screen (takes priority over WIDE). */
+    const target1 = this.goatMode
+      ? GOAT_PADDLE_HEIGHT
+      : this.hasBoost(1, 'WIDE_PADDLE')
+        ? PADDLE_HEIGHT * POWERUP_WIDE_FACTOR
+        : PADDLE_HEIGHT;
     state.player1.height += (target1 - state.player1.height) * k;
 
     /* P2 WIDE_PADDLE. */
@@ -1602,7 +1644,7 @@ export class Game
       ? [0, 0]
       : getShakeOffset(state.shake);
 
-    this.renderer.draw(state, shakeX, shakeY, this.gameTime, this.godMode);
+    this.renderer.draw(state, shakeX, shakeY, this.gameTime, this.godMode, this.goatMode);
 
     /* ── Serve countdown overlay ── */
     if (state.phase === 'SERVING')

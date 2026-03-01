@@ -62,6 +62,8 @@ import
   POWERUP_RADIUS, POWERUP_LIFETIME_MS, POWERUP_BOOST_MS, POWERUP_STICKY_HOLD_MS,
   COLOR_POWERUP_WIDE, COLOR_POWERUP_SPEED, COLOR_POWERUP_STICKY, COLOR_POWERUP_TRAIL,
   PADDLE_BASE_SPEED,
+  BALL_BASE_SPEED, BALL_MAX_SPEED,
+  CHROMATIC_MS,
 } from './constants.js';
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -211,13 +213,15 @@ export class Renderer
    * @param shakeY   Vertical camera shake offset (px).
    * @param gameTime Milliseconds elapsed since match start (for boost expiry display).
    * @param godMode  If true, P1 always shows all active boosts.
+   * @param goatMode If true, P1 paddle renders in gold GOAT style.
    */
   draw(
     state: GameState,
     shakeX: number,
     shakeY: number,
     gameTime = 0,
-    godMode  = false
+    godMode  = false,
+    goatMode = false
   ): void
   {
     const { ctx } = this;
@@ -327,7 +331,7 @@ export class Renderer
       this.drawStickyPaddleEffect(holdingPaddle, state.ball.stickyHoldMs);
     }
 
-    this.drawPaddle(state.player1, p1SpeedBoost, p1WidePaddle);
+    this.drawPaddle(state.player1, p1SpeedBoost, p1WidePaddle, goatMode);
     this.drawPaddle(state.player2, p2SpeedBoost, p2WidePaddle);
     this.drawImpactRings(state.impactRings);
     this.drawGoalFlashes(state.goalFlashes);
@@ -416,26 +420,6 @@ export class Renderer
     ctx.lineWidth   = 1.5;
     ctx.beginPath();
     ctx.arc(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2, 60, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  /**
-   * @method drawToyCourtMarkings
-   * @description Draws a glowing right-wall line for the single-paddle (toy) mode.
-   *              Not used in normal PvAI play but kept for completeness.
-   */
-  private drawToyCourtMarkings(): void
-  {
-    const { ctx } = this;
-    ctx.save();
-    ctx.strokeStyle = 'rgba(0, 240, 255, 0.25)';
-    ctx.lineWidth   = 2;
-    ctx.shadowColor = COLOR_P1;
-    ctx.shadowBlur  = 6;
-    ctx.beginPath();
-    ctx.moveTo(CANVAS_WIDTH - 1, 0);
-    ctx.lineTo(CANVAS_WIDTH - 1, CANVAS_HEIGHT);
     ctx.stroke();
     ctx.restore();
   }
@@ -654,8 +638,8 @@ export class Renderer
     const { ctx } = this;
     const r      = ball.radius;
 
-    /* speedT: 0 at 280px/s, 1 at 720px/s — drives squint expression. */
-    const speedT = Math.max(0, Math.min((ball.speed - 280) / 440, 1));
+    /* speedT: 0 at base speed, 1 at max speed — drives squint expression. */
+    const speedT = Math.max(0, Math.min((ball.speed - BALL_BASE_SPEED) / (BALL_MAX_SPEED - BALL_BASE_SPEED), 1));
 
     /* Eye position: slightly forward (in direction of vx), upper half of ball. */
     const dirX = ball.vx >= 0 ? 1 : -1;
@@ -876,10 +860,13 @@ export class Renderer
    * @param speedBoost  true = SPEED_BOOTS boost active.
    * @param widePaddle  true = WIDE_PADDLE boost active.
    */
-  drawPaddle(paddle: Paddle, speedBoost = false, widePaddle = false): void
+  drawPaddle(paddle: Paddle, speedBoost = false, widePaddle = false, goatMode = false): void
   {
     const { ctx } = this;
-    const baseColor = paddle.id === 1 ? COLOR_P1 : COLOR_P2;
+    /* GOAT mode gives P1 a slowly cycling gold color instead of cyan. */
+    const baseColor = goatMode && paddle.id === 1
+      ? `hsl(${45 + Math.sin(Date.now() * 0.002) * 12}, 100%, 60%)`
+      : paddle.id === 1 ? COLOR_P1 : COLOR_P2;
 
     /* ── Color flash: lerp base → orange → base over PADDLE_COLOR_FLASH_MS ──
        Uses sin(t * π) as the intensity curve.  When t=1 (start of flash)
@@ -908,7 +895,7 @@ export class Renderer
        split glitch effect on contact.                                   */
     if (paddle.chromaticTimer > 0)
     {
-      const t   = paddle.chromaticTimer / 50;
+      const t   = paddle.chromaticTimer / CHROMATIC_MS;
       const off = CHROMATIC_OFFSET * t;
 
       ctx.save();
@@ -932,6 +919,19 @@ export class Renderer
     ctx.globalAlpha = 0.25 + flashBoost * 0.35;
     ctx.fillRect(px - 2, pyAdj - 2, pw + 4, ph + 4);
     ctx.restore();
+
+    /* ── GOAT mode outer aura ── */
+    if (goatMode)
+    {
+      const goatPulse = 0.5 + 0.5 * Math.abs(Math.sin(Date.now() * 0.003));
+      ctx.save();
+      ctx.shadowColor = color;
+      ctx.shadowBlur  = 40 + goatPulse * 24;
+      ctx.fillStyle   = color;
+      ctx.globalAlpha = 0.08 + goatPulse * 0.07;
+      ctx.fillRect(px - 6, pyAdj - 6, pw + 12, ph + 12);
+      ctx.restore();
+    }
 
     /* ── Main paddle body ── */
     ctx.save();
