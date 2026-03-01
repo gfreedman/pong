@@ -577,6 +577,18 @@ export const AI_HARD_FALSE_READ_CHANCE   = 0.04;
    Spawn timing is randomized between MIN and MAX so orbs don't feel scripted.
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/** Left X boundary of the orb spawn zone — clear of the P1 paddle area. */
+export const POWERUP_SPAWN_MIN_X    = 260;
+
+/** Right X boundary of the orb spawn zone — clear of the P2 paddle area. */
+export const POWERUP_SPAWN_MAX_X    = 700;
+
+/** Top Y boundary of the orb spawn zone — away from the wall. */
+export const POWERUP_SPAWN_MIN_Y    = 80;
+
+/** Bottom Y boundary of the orb spawn zone — away from the wall. */
+export const POWERUP_SPAWN_MAX_Y    = 460;
+
 /** Minimum wait after the last orb before a new one can spawn (ms). */
 export const POWERUP_SPAWN_MIN_MS   = 8000;
 

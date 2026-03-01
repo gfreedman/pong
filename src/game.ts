@@ -55,6 +55,7 @@ import
   BALL_MATERIALIZE_MS,
   SERVE_PENDING_AI_MS,
   LEGENDARY_SHAKE_INTENSITY, LEGENDARY_SHAKE_MS,
+  POWERUP_SPAWN_MIN_X, POWERUP_SPAWN_MAX_X, POWERUP_SPAWN_MIN_Y, POWERUP_SPAWN_MAX_Y,
   POWERUP_SPAWN_MIN_MS, POWERUP_SPAWN_MAX_MS, POWERUP_LIFETIME_MS,
   POWERUP_BOOST_MS, POWERUP_RADIUS, POWERUP_WIDE_FACTOR, POWERUP_SPEED_FACTOR,
   POWERUP_STICKY_HOLD_MS, POWERUP_SPEED_ACCEL_FACTOR, POWERUP_TRAIL_SPEED_BONUS,
@@ -1559,8 +1560,8 @@ export class Game
       const type  = types[Math.floor(Math.random() * types.length)];
 
       /* Spawn in the center zone (away from paddle areas and walls). */
-      const x = 260 + Math.random() * (700 - 260);
-      const y =  80 + Math.random() * (460 -  80);
+      const x = POWERUP_SPAWN_MIN_X + Math.random() * (POWERUP_SPAWN_MAX_X - POWERUP_SPAWN_MIN_X);
+      const y = POWERUP_SPAWN_MIN_Y + Math.random() * (POWERUP_SPAWN_MAX_Y - POWERUP_SPAWN_MIN_Y);
 
       state.powerUps.push(
       {

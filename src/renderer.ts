@@ -149,6 +149,14 @@ export class Renderer
   private gameOffY: number;
   private gameScale: number;
 
+  /**
+   * Game-time clock in ms (set to the gameTime parameter at the start of each
+   * draw() call).  Used for all animation oscillations instead of this.t so
+   * pulses are frame-rate-independent and anchored to match start — no jump when
+   * a background tab returns to focus.
+   */
+  private t: number = 0;
+
   /* ── Constructor ─────────────────────────────────────────────────────── */
 
   /**
@@ -226,6 +234,9 @@ export class Renderer
   {
     const { ctx } = this;
     const rc = state.rallyCount;
+
+    /* Snapshot game time for all oscillation math this frame. */
+    this.t = gameTime;
 
     /* ── Background warmth (computed once, used for both fills) ──────────
        Warms subtly toward red at Dramatic+ (subliminal tension).         */
@@ -307,7 +318,7 @@ export class Renderer
       if (isPulsing)
       {
         /* Gentle size pulse using sin — purely cosmetic, doesn't affect collision. */
-        const pulse = 1 + Math.sin(Date.now() * 0.006) * 0.07;
+        const pulse = 1 + Math.sin(this.t * 0.006) * 0.07;
         const orig  = state.ball.radius;
         state.ball.radius = orig * pulse;
         this.drawBall(state.ball);
@@ -865,7 +876,7 @@ export class Renderer
     const { ctx } = this;
     /* GOAT mode gives P1 a slowly cycling gold color instead of cyan. */
     const baseColor = goatMode && paddle.id === 1
-      ? `hsl(${45 + Math.sin(Date.now() * 0.002) * 12}, 100%, 60%)`
+      ? `hsl(${45 + Math.sin(this.t * 0.002) * 12}, 100%, 60%)`
       : paddle.id === 1 ? COLOR_P1 : COLOR_P2;
 
     /* ── Color flash: lerp base → orange → base over PADDLE_COLOR_FLASH_MS ──
@@ -923,7 +934,7 @@ export class Renderer
     /* ── GOAT mode outer aura ── */
     if (goatMode)
     {
-      const goatPulse = 0.5 + 0.5 * Math.abs(Math.sin(Date.now() * 0.003));
+      const goatPulse = 0.5 + 0.5 * Math.abs(Math.sin(this.t * 0.003));
       ctx.save();
       ctx.shadowColor = color;
       ctx.shadowBlur  = 40 + goatPulse * 24;
@@ -951,7 +962,7 @@ export class Renderer
       ctx.shadowColor = COLOR_POWERUP_WIDE;
       ctx.shadowBlur  = 10;
       ctx.lineWidth   = 2;
-      ctx.globalAlpha = 0.75 + 0.25 * Math.sin(Date.now() * 0.004);
+      ctx.globalAlpha = 0.75 + 0.25 * Math.sin(this.t * 0.004);
 
       /* Top cap. */
       ctx.beginPath();
@@ -989,7 +1000,7 @@ export class Renderer
         for (let i = 0; i < 4; i++)
         {
           const xFrac     = (i + 0.5) / 4;
-          const streakLen = speedFrac * 18 * (0.6 + 0.4 * Math.sin(Date.now() * 0.01 + i));
+          const streakLen = speedFrac * 18 * (0.6 + 0.4 * Math.sin(this.t * 0.01 + i));
           ctx.globalAlpha = speedFrac * (0.75 - i * 0.15);
           ctx.lineWidth   = 1.8 - i * 0.3;
           ctx.beginPath();
@@ -1102,7 +1113,7 @@ export class Renderer
     const t     = Math.min((rallyCount - RALLY_TIER_LEGENDARY) / 15, 1);
 
     /* pulse: oscillates 0→1 at ~2Hz using a sine wave. */
-    const pulse = (Math.sin(Date.now() * 0.004) + 1) / 2;
+    const pulse = (Math.sin(this.t * 0.004) + 1) / 2;
 
     ctx.save();
     ctx.strokeStyle = COLOR_P1;
@@ -1647,7 +1658,7 @@ export class Renderer
        Pulsing "⚡ GOD" text to the right of P1's icons.               */
     if (godMode)
     {
-      const pulse  = 0.72 + 0.28 * Math.sin(Date.now() * 0.005);
+      const pulse  = 0.72 + 0.28 * Math.sin(this.t * 0.005);
       const badgeX = 8 + ALL_TYPES.length * (iconSide + iconGap) + 6;
 
       ctx.save();
@@ -1711,7 +1722,7 @@ export class Renderer
   {
     const { ctx } = this;
     const progress = ball.stickyHoldMs / POWERUP_STICKY_HOLD_MS; // 1 → 0
-    const pulse    = 0.7 + 0.3 * Math.sin(Date.now() * 0.018);
+    const pulse    = 0.7 + 0.3 * Math.sin(this.t * 0.018);
 
     /* ── Pulsing corona ── */
     ctx.save();
@@ -1759,7 +1770,7 @@ export class Renderer
     /* Center of the paddle face. */
     const cx = paddle.x + paddle.recoilOffset + paddle.width  / 2;
     const cy = paddle.y + paddle.emotionOffset + paddle.height / 2;
-    const t  = Date.now() * 0.007;
+    const t  = this.t * 0.007;
 
     for (let i = 0; i < 3; i++)
     {
