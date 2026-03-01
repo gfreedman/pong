@@ -610,6 +610,23 @@ export const POWERUP_SPEED_ACCEL_FACTOR = 1.5;
 /** TRAIL_BLAZER: bonus speed (px/s) added to the ball on each hit while active. */
 export const POWERUP_TRAIL_SPEED_BONUS  = 25;
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   GOAT MODE  (secret cheat)
+   Activated by holding G + O + A + T simultaneously.  Toggles on/off.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/** P1 paddle height while GOAT mode is active — half the canvas height. */
+export const GOAT_PADDLE_HEIGHT  = CANVAS_HEIGHT / 2;
+
+/** Spin magnitude applied on every P1 hit in GOAT mode. */
+export const GOAT_SPIN_AMOUNT    = 12;
+
+/** Speed multiplier applied to the ball on every P1 hit in GOAT mode. */
+export const GOAT_SPEED_MULT     = 4;
+
+/** Absolute ball speed cap while GOAT mode is active (px/s). */
+export const GOAT_BALL_MAX_SPEED = BALL_MAX_SPEED * 4;
+
 /* ─── Power-up orb colors ────────────────────────────────────────────────── */
 
 /** Color of the WIDE_PADDLE orb — green. */
