@@ -28,6 +28,7 @@ jobs:
           cache: npm
 
       - run: npm ci
+      - run: npm test
       - run: npm run build
       - run: mkdir _site && cp index.html style.css _site/ && cp -r dist _site/
 

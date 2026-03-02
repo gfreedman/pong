@@ -7,7 +7,8 @@
     "build": "tsc --noEmit && esbuild src/main.ts --bundle --outfile=dist/script.js --target=es2020",
     "dev": "esbuild src/main.ts --bundle --outfile=dist/script.js --target=es2020 --watch",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "check": "npm test && npm run build"
   },
   "devDependencies": {
     "esbuild": "^0.20.0",
