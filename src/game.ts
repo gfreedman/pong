@@ -420,8 +420,18 @@ export class Game
     const deltaMs = Math.min(timestamp - this.lastTimestamp, 80);
     this.lastTimestamp = timestamp;
 
-    this.update(deltaMs);
-    this.render();
+    try
+    {
+      this.update(deltaMs);
+      this.render();
+    }
+    catch (err)
+    {
+      /* Log the error but keep the loop alive so a single-frame exception
+         doesn't permanently freeze the game.  Check the browser console
+         for the full stack trace if you see unexpected behaviour.        */
+      console.error('[NeonPong] Frame error:', err);
+    }
 
     /* Flush single-frame input events AFTER update and render. */
     this.input.flush();
