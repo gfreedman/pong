@@ -62,6 +62,7 @@ import
   COLOR_POWERUP_WIDE, COLOR_POWERUP_SPEED, COLOR_POWERUP_STICKY, COLOR_POWERUP_TRAIL,
   GOAT_PADDLE_HEIGHT, GOAT_SPIN_AMOUNT, GOAT_SPEED_MULT, GOAT_BALL_MAX_SPEED,
   WALL_FLASH_MS,
+  SAFE_INSET_LEFT_PX, SAFE_INSET_RIGHT_PX,
 } from './constants.js';
 import { InputManager } from './input.js';
 import { AudioManager } from './audio.js';
@@ -129,8 +130,8 @@ function makeBall(): Ball
 function makePaddle(side: 1 | 2): Paddle
 {
   const x = side === 1
-    ? PADDLE_MARGIN
-    : CANVAS_WIDTH - PADDLE_MARGIN - PADDLE_WIDTH;
+    ? PADDLE_MARGIN + SAFE_INSET_LEFT_PX
+    : CANVAS_WIDTH - PADDLE_MARGIN - PADDLE_WIDTH - SAFE_INSET_RIGHT_PX;
 
   return {
     x,

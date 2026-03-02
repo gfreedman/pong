@@ -12,7 +12,7 @@
  */
 
 import { Game } from './game.js';
-import { setCanvasWidth } from './constants.js';
+import { setCanvasWidth, setSafeInsets } from './constants.js';
 
 /**
  * @function main
@@ -36,6 +36,13 @@ function main(): void
      on any display.  Must run before new Game() so all subsystems see
      the correct width from the moment they initialise.                  */
   setCanvasWidth(window.innerWidth, window.innerHeight);
+
+  /* Read safe-area insets from the CSS custom properties set in style.css.
+     env() values are only accessible via computed style, not directly in JS. */
+  const cs  = getComputedStyle(document.documentElement);
+  const sal = parseFloat(cs.getPropertyValue('--sal')) || 0;
+  const sar = parseFloat(cs.getPropertyValue('--sar')) || 0;
+  setSafeInsets(sal, sar);
 
   /* ── Mobile: orientation lock + reload safety net ─────────────────────
      Request landscape lock so the OS rotates the game automatically.

@@ -47,6 +47,33 @@ export function setCanvasWidth(viewportW: number, viewportH: number): void
   CANVAS_WIDTH = Math.round(CANVAS_HEIGHT * viewportW / viewportH);
 }
 
+/**
+ * Safe-area insets, converted from CSS pixels → game pixels.
+ * Set once at startup (main.ts reads env() via CSS custom properties).
+ * Applied in makePaddle() so both paddles clear the notch/home-indicator.
+ */
+export let SAFE_INSET_LEFT_PX  = 0;
+export let SAFE_INSET_RIGHT_PX = 0;
+
+/**
+ * @function setSafeInsets
+ * @description Converts CSS-pixel safe-area insets to game-pixel offsets
+ *              and stores them for use by makePaddle().
+ *
+ *              Must be called after setCanvasWidth() so CANVAS_WIDTH is final.
+ *
+ * @param leftCSS   env(safe-area-inset-left)  in CSS pixels.
+ * @param rightCSS  env(safe-area-inset-right) in CSS pixels.
+ */
+export function setSafeInsets(leftCSS: number, rightCSS: number): void
+{
+  /* Scale: 1 CSS px = CANVAS_HEIGHT / window.innerHeight game px.
+     Same ratio the renderer uses for its game transform.            */
+  const scale        = CANVAS_HEIGHT / window.innerHeight;
+  SAFE_INSET_LEFT_PX  = Math.ceil(leftCSS  * scale);
+  SAFE_INSET_RIGHT_PX = Math.ceil(rightCSS * scale);
+}
+
 /** Target frames per second.  Used to size pre-allocated arrays and time-step sanity checks. */
 export const TARGET_FPS    = 60;
 

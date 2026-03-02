@@ -34,6 +34,10 @@
   --text-dim:   #666;
   --card-bg:    rgba(255, 255, 255, 0.025);
   --card-border:rgba(255, 255, 255, 0.07);
+
+  /* Safe-area bridges — JS reads these to convert env() insets into game px. */
+  --sal: env(safe-area-inset-left,   0px);
+  --sar: env(safe-area-inset-right,  0px);
 }
 
 /* ── Base ───────────────────────────────────────────────────── */
