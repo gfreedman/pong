@@ -831,6 +831,27 @@ export class Game
   }
 
   /**
+   * @method handleOrientationChange
+   * @description Called by main.ts when the device orientation changes.
+   *              Resizes the canvas to the new viewport dimensions and pauses
+   *              the game if it is currently in an active phase.
+   *              Called once the browser has finished its orientation animation
+   *              (~300 ms after the orientationchange event fires).
+   */
+  handleOrientationChange(): void
+  {
+    /* Re-fit the canvas pixel buffer to the new viewport size. */
+    this.renderer.handleResize(this.canvas);
+
+    /* Pause only if gameplay is live — not if already paused, on a menu, etc. */
+    const pauseable: GamePhase[] = ['PLAYING', 'SERVE_PENDING', 'SERVING', 'POINT_SCORED'];
+    if (pauseable.includes(this.state.phase))
+    {
+      this.pauseGame();
+    }
+  }
+
+  /**
    * @method tickPaused
    * @description Handles keyboard navigation while paused.
    *              Same W/S / Arrow keys as other menus; Enter/Space confirms.

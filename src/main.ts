@@ -44,11 +44,16 @@ function main(): void
   const sar = parseFloat(cs.getPropertyValue('--sar')) || 0;
   setSafeInsets(sal, sar);
 
-  /* ── Mobile: orientation lock + reload safety net ─────────────────────
+  /* ── Step 3: Create and start the game ───────────────────────────────
+     Game owns the entire state machine, game loop, and all subsystems.  */
+  const game = new Game(canvas);
+  game.start();
+
+  /* ── Mobile: orientation lock + graceful orientation handling ─────────
      Request landscape lock so the OS rotates the game automatically.
      iOS Safari ignores lock() — the CSS rotate-prompt handles that case.
-     On any orientation change, reload so the canvas reinitialises with
-     the correct dimensions.                                             */
+     On orientation change: pause the game and resize the canvas once the
+     browser has finished its animation (~300 ms).  No page reload needed. */
   const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
     || ('ontouchstart' in window)
     || (navigator.maxTouchPoints > 1);
@@ -61,14 +66,18 @@ function main(): void
 
     window.addEventListener('orientationchange', () =>
     {
-      setTimeout(() => window.location.reload(), 150);
+      setTimeout(() =>
+      {
+        /* Only recalculate logical canvas width when back in landscape —
+           portrait dimensions would corrupt game-coordinate math.       */
+        if (window.innerWidth > window.innerHeight)
+        {
+          setCanvasWidth(window.innerWidth, window.innerHeight);
+        }
+        game.handleOrientationChange();
+      }, 300);
     });
   }
-
-  /* ── Step 3: Create and start the game ───────────────────────────────
-     Game owns the entire state machine, game loop, and all subsystems.  */
-  const game = new Game(canvas);
-  game.start();
 
   /* Expose instance on window for browser-console debugging and tests */
   (window as Window & { __game?: Game }).__game = game;
