@@ -1325,17 +1325,26 @@ export class Renderer
    * @param text  The countdown text to display (e.g. "3", "2", "1").
    * @param ball  The ball (position is read but not used — kept for signature compatibility).
    */
-  drawCountdown(text: string, ball: Ball): void
+  drawCountdown(text: string, _ball: Ball): void
   {
     const { ctx } = this;
+
+    /* drawCountdown is called from game.ts AFTER draw() returns, so the
+       game transform (gameOffX/Y, gameScale) has been restored.  Re-apply
+       it here so CANVAS_WIDTH/HEIGHT coordinates map to the correct spot. */
     ctx.save();
-    ctx.textAlign   = 'center';
-    ctx.font        = 'bold 80px "Courier New", monospace';
-    ctx.fillStyle   = COLOR_P1;
-    ctx.shadowColor = COLOR_P1;
-    ctx.shadowBlur  = 30;
-    ctx.globalAlpha = 0.9;
-    ctx.fillText(text, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 28);
+    ctx.translate(this.gameOffX, this.gameOffY);
+    ctx.scale(this.gameScale, this.gameScale);
+
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';          // true vertical center — no +28 fudge
+    ctx.font         = 'bold 80px "Courier New", monospace';
+    ctx.fillStyle    = COLOR_P1;
+    ctx.shadowColor  = COLOR_P1;
+    ctx.shadowBlur   = 30;
+    ctx.globalAlpha  = 0.9;
+    /* Sit slightly above the center line so it clears the court marking. */
+    ctx.fillText(text, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 30);
     ctx.restore();
   }
 
