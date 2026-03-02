@@ -52,7 +52,7 @@ import
   BREATH_AMP_PX,
   CHROMATIC_OFFSET,
   RING_MAX_RADIUS, RING_DURATION_MS,
-  WALL_MARK_FADE_MS,
+  WALL_MARK_FADE_MS, WALL_FLASH_MS,
   HIT_EYE_FLASH_MS, BALL_SAD_MS,
   PADDLE_COLOR_FLASH_MS,
   GOAL_FLASH_MS, GOAL_PARTICLE_MS,
@@ -317,7 +317,7 @@ export class Renderer
       state.difficulty === 'EASY' ? '#44ff88' :
       COLOR_P1;
     this.drawCourt(courtIntensity, courtColor);
-    this.drawWallBoundaries(courtIntensity, courtColor);
+    this.drawWallBoundaries(courtIntensity, courtColor, state.wallFlashTop, state.wallFlashBottom);
 
     /* ── Particles + power-up orbs ── */
     this.drawGoalParticles(state.goalParticles);
@@ -1716,21 +1716,85 @@ export class Renderer
    * @param courtIntensity  1 = normal; higher = brighter glow.
    * @param courtColor      Hex color string — driven by the current difficulty.
    */
-  private drawWallBoundaries(courtIntensity = 1, courtColor = COLOR_P1): void
+  private drawWallBoundaries(
+    courtIntensity  = 1,
+    courtColor      = COLOR_P1,
+    wallFlashTop    = 0,
+    wallFlashBottom = 0,
+  ): void
   {
     const { ctx } = this;
     const thickness = 5;
-    const alpha     = Math.min(0.7 + (courtIntensity - 1) * 0.2, 0.95);
-    const blur      = 8 + (courtIntensity - 1) * 6;
 
+    /* Base alpha/blur driven by rally intensity. */
+    const baseAlpha = Math.min(0.7 + (courtIntensity - 1) * 0.2, 0.95);
+    const baseBlur  = 8  + (courtIntensity - 1) * 6;
+
+    /* Flash intensity: sin arc so it peaks in the middle of the duration. */
+    const flashTop = wallFlashTop > 0
+      ? Math.sin((wallFlashTop / WALL_FLASH_MS) * Math.PI)
+      : 0;
+    const flashBot = wallFlashBottom > 0
+      ? Math.sin((wallFlashBottom / WALL_FLASH_MS) * Math.PI)
+      : 0;
+
+    this.drawOneWall(0,                         CANVAS_WIDTH, thickness, courtColor, baseAlpha, baseBlur, flashTop);
+    this.drawOneWall(CANVAS_HEIGHT - thickness, CANVAS_WIDTH, thickness, courtColor, baseAlpha, baseBlur, flashBot);
+  }
+
+  /**
+   * @method drawOneWall
+   * @description Draws a single wall bar (top or bottom) with optional flash bloom.
+   *
+   * @param y          Top-left Y of the bar.
+   * @param w          Width of the bar (= CANVAS_WIDTH).
+   * @param h          Height of the bar.
+   * @param color      Court color string.
+   * @param baseAlpha  Alpha at rest.
+   * @param baseBlur   Shadow blur at rest.
+   * @param flash      0–1 flash intensity (peaks at 1 at midpoint of bounce).
+   */
+  private drawOneWall(
+    y: number, w: number, h: number,
+    color: string, baseAlpha: number, baseBlur: number, flash: number,
+  ): void
+  {
+    const { ctx } = this;
+    const alpha = Math.min(baseAlpha + flash * 0.35, 1.0);
+    const blur  = baseBlur + flash * 42;
+
+    /* Core bar */
     ctx.save();
-    ctx.fillStyle   = courtColor;
-    ctx.shadowColor = courtColor;
+    ctx.fillStyle   = color;
+    ctx.shadowColor = color;
     ctx.shadowBlur  = blur;
     ctx.globalAlpha = alpha;
-    ctx.fillRect(0, 0, CANVAS_WIDTH, thickness);                          // top wall
-    ctx.fillRect(0, CANVAS_HEIGHT - thickness, CANVAS_WIDTH, thickness);  // bottom wall
+    ctx.fillRect(0, y, w, h);
     ctx.restore();
+
+    /* Inward bloom: a gradient that radiates from the wall into the court.
+       Fades from the wall color to transparent over ~60px — gives the
+       impression of light spilling off a hot surface.                    */
+    if (flash > 0.01)
+    {
+      const bloomH   = 60;
+      const bloomDir = y === 0 ? 1 : -1;          // +1 = downward, -1 = upward
+      const grad     = ctx.createLinearGradient(0, y, 0, y + bloomDir * bloomH);
+
+      /* Parse hex color into rgb so we can inject alpha. */
+      const r = parseInt(color.slice(1, 3), 16);
+      const g = parseInt(color.slice(3, 5), 16);
+      const b = parseInt(color.slice(5, 7), 16);
+
+      grad.addColorStop(0,   `rgba(${r},${g},${b},${(flash * 0.55).toFixed(3)})`);
+      grad.addColorStop(1,   `rgba(${r},${g},${b},0)`);
+
+      ctx.save();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle   = grad;
+      ctx.fillRect(0, y + (bloomDir < 0 ? -bloomH : h), w, bloomH);
+      ctx.restore();
+    }
   }
 
   /* ═══════════════════════════════════════════════════════════════════════

@@ -386,6 +386,10 @@ export interface GameState
   score1Pop:        number;  // Scale factor > 1 just after P1 scores; eases back to 1
   score2Pop:        number;  // Same for P2
 
+  /* ── Wall flash timers ── */
+  wallFlashTop:    number;  // ms remaining in the top-wall brightness pulse (0 = idle)
+  wallFlashBottom: number;  // ms remaining in the bottom-wall brightness pulse (0 = idle)
+
   /* ── Power-ups ── */
   powerUps:      PowerUp[];      // Orbs currently on the court
   activeBoosts:  ActiveBoost[];  // Boosts currently active for either player

@@ -378,6 +378,9 @@ export const GOAL_PARTICLE_GRAVITY = 150;
 /** Time for a wall scorch mark to fade completely (ms). */
 export const WALL_MARK_FADE_MS   = 10000;
 
+/** Duration of the brightness pulse on the top/bottom wall bars after a bounce (ms). */
+export const WALL_FLASH_MS       = 220;
+
 /* ═══════════════════════════════════════════════════════════════════════════
    MATCH
    ═══════════════════════════════════════════════════════════════════════════ */

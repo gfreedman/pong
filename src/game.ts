@@ -61,6 +61,7 @@ import
   POWERUP_STICKY_HOLD_MS, POWERUP_SPEED_ACCEL_FACTOR, POWERUP_TRAIL_SPEED_BONUS,
   COLOR_POWERUP_WIDE, COLOR_POWERUP_SPEED, COLOR_POWERUP_STICKY, COLOR_POWERUP_TRAIL,
   GOAT_PADDLE_HEIGHT, GOAT_SPIN_AMOUNT, GOAT_SPEED_MULT, GOAT_BALL_MAX_SPEED,
+  WALL_FLASH_MS,
 } from './constants.js';
 import { InputManager } from './input.js';
 import { AudioManager } from './audio.js';
@@ -333,6 +334,8 @@ export class Game
       materializeAlpha: 0,
       score1Pop: 1,
       score2Pop: 1,
+      wallFlashTop:    0,
+      wallFlashBottom: 0,
       powerUps:     [],
       activeBoosts: [],
       lastHitPlayer: 1,
@@ -1177,6 +1180,8 @@ export class Game
   {
     updatePaddleAnimations(this.state.player1, deltaMs);
     updatePaddleAnimations(this.state.player2, deltaMs);
+    this.state.wallFlashTop    = Math.max(0, this.state.wallFlashTop    - deltaMs);
+    this.state.wallFlashBottom = Math.max(0, this.state.wallFlashBottom - deltaMs);
   }
 
   /* ═══════════════════════════════════════════════════════════════════════
@@ -1354,16 +1359,18 @@ export class Game
       }
     }
 
-    /* ── 5. Wall bounce audio and scorch marks ── */
+    /* ── 5. Wall bounce audio, scorch marks, and wall flash ── */
     if (result.hitWall === 'top')
     {
       this.audio.playWallBounce();
       spawnWallMark(state.wallMarks, state.ball.x, 0);
+      state.wallFlashTop = WALL_FLASH_MS;
     }
     else if (result.hitWall === 'bottom')
     {
       this.audio.playWallBounce();
       spawnWallMark(state.wallMarks, state.ball.x, CANVAS_HEIGHT);
+      state.wallFlashBottom = WALL_FLASH_MS;
     }
 
     /* ── 6. Goal detection ─────────────────────────────────────────────── */
