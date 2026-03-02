@@ -37,7 +37,7 @@ import
 import
 {
   CANVAS_WIDTH, CANVAS_HEIGHT,
-  BALL_RADIUS, BALL_SPEED_INC, BALL_MAX_SPEED, BALL_MAX_ANGLE_DEG,
+  BALL_RADIUS, BALL_BASE_SPEED, BALL_SPEED_INC, BALL_MAX_SPEED, BALL_MAX_ANGLE_DEG,
   TRAIL_INTERVAL_MS, TRAIL_LENGTH,
   SPIN_IMPART_FACTOR, SPIN_CURVE_FORCE, SPIN_DECAY_PER_S, SPIN_WALL_RETAIN,
   HITSTOP_SLOW_MS, HITSTOP_FAST_MS, HITSTOP_SPEED_THRESHOLD,
@@ -82,7 +82,7 @@ export function resetBall(ball: Ball, towardLeft: boolean): void
   ball.sadTimer      = 0;
 
   /* ── Reset to base speed ── */
-  ball.speed = 300; // BALL_BASE_SPEED — each rally starts fresh
+  ball.speed = BALL_BASE_SPEED; // each rally starts fresh
 
   /* ── Compute launch angle ──────────────────────────────────────────────
      Random angle within ±SERVE_ANGLE_RANGE degrees from horizontal.
@@ -130,6 +130,13 @@ export interface PhysicsResult
    * goal = 2 means P2 scored (ball exited left boundary).
    */
   goal: 1 | 2 | null;
+
+  /**
+   * How far from center the ball struck the paddle (0 = dead center, 1 = extreme edge).
+   * Only meaningful when hitPaddle !== null; 0 otherwise.
+   * Passed to AudioManager.playPaddleHit() to select the edge-hit sound variant.
+   */
+  edgeFactor: number;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -166,7 +173,7 @@ export function updateBall(
   toyMode: boolean
 ): PhysicsResult
 {
-  const result: PhysicsResult = { hitPaddle: null, hitWall: null, goal: null };
+  const result: PhysicsResult = { hitPaddle: null, hitWall: null, goal: null, edgeFactor: 0 };
   const dt = deltaMs / 1000; // convert ms → seconds for velocity integration
 
   /* ── 1. Hitstop ───────────────────────────────────────────────────────
@@ -206,7 +213,8 @@ export function updateBall(
 
   /* ── 4. Trail ─────────────────────────────────────────────────────────
      Every TRAIL_INTERVAL_MS ms we capture the current position into a
-     ring buffer.  The renderer draws a fading streak through these points. */
+     sliding window (newest at index 0).  The renderer draws a fading
+     streak through these points.                                         */
   ball.trailTimer += deltaMs;
   if (ball.trailTimer >= TRAIL_INTERVAL_MS)
   {
@@ -272,13 +280,13 @@ export function updateBall(
   {
     if (checkPaddleCollision(ball, player1))
     {
-      resolvePaddleHit(ball, player1, false); // left paddle → ball bounces right
-      result.hitPaddle = 1;
+      result.edgeFactor = resolvePaddleHit(ball, player1, false); // left paddle → ball bounces right
+      result.hitPaddle  = 1;
     }
     else if (checkPaddleCollision(ball, player2))
     {
-      resolvePaddleHit(ball, player2, true);  // right paddle → ball bounces left
-      result.hitPaddle = 2;
+      result.edgeFactor = resolvePaddleHit(ball, player2, true);  // right paddle → ball bounces left
+      result.hitPaddle  = 2;
     }
   }
 
@@ -333,13 +341,13 @@ function checkPaddleCollision(ball: Ball, paddle: Paddle): boolean
  * @param paddle     The paddle that was hit (mutated in place for animation state).
  * @param fromRight  true if this is the right paddle (ball should bounce leftward).
  */
-function resolvePaddleHit(ball: Ball, paddle: Paddle, fromRight: boolean): void
+function resolvePaddleHit(ball: Ball, paddle: Paddle, fromRight: boolean): number
 {
   /* ── Contact position (0 = top, 1 = bottom, 0.5 = center) ── */
   const contact    = Math.max(0, Math.min(1, (ball.y - paddle.y) / paddle.height));
 
   /* edgeFactor: 0 = center hit, 1 = extreme edge hit.
-     Used for audio pitch selection and edge-hit detuning.     */
+     Returned to updateBall() → PhysicsResult so Game can pass it to audio.  */
   const edgeFactor = Math.abs(contact - 0.5) * 2;
 
   /* ── Compute outbound angle ── */
@@ -398,11 +406,7 @@ function resolvePaddleHit(ball: Ball, paddle: Paddle, fromRight: boolean): void
   /* ── Ball face reaction ── */
   ball.hitFlashTimer = HIT_EYE_FLASH_MS; // eye widens for ~4 frames
 
-  /* ── Store edge factor for audio ──────────────────────────────────────
-     The Game reads this on the next frame to pass edgeFactor to
-     AudioManager.playPaddleHit().  Using a temporary property avoids
-     adding an edge-factor field to the Ball interface.                  */
-  (ball as Ball & { _edgeFactor?: number })._edgeFactor = edgeFactor;
+  return edgeFactor;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -500,20 +504,6 @@ export function updatePaddleAnimations(paddle: Paddle, deltaMs: number): void
      The phase angle advances at 0.5 Hz (one full breath every 2 seconds).
      The renderer uses sin(breathPhase) × BREATH_AMP_PX to modulate height. */
   paddle.breathPhase += 2 * Math.PI * 0.5 * dt;
-}
-
-/**
- * @function triggerPaddleRecoil
- * @description Kicks the recoil spring directly (without going through resolvePaddleHit).
- *              Used by the Game for external recoil triggers if needed.
- *
- * @param paddle     The paddle to recoil.
- * @param fromRight  true = recoil pushes right; false = pushes left.
- */
-export function triggerPaddleRecoil(paddle: Paddle, fromRight: boolean): void
-{
-  const dir = fromRight ? 1 : -1;
-  paddle.recoilVelocity = dir * PADDLE_RECOIL_PX * 30;
 }
 
 /**

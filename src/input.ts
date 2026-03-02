@@ -237,30 +237,6 @@ export class InputManager
     return this.isDown('s') || this.isDown('S') || this.isDown('ArrowDown');
   }
 
-  /* ── Player 2 movement (PvP mode placeholders) ────────────────────────────
-     P2 uses the arrow keys when a second human is playing.
-     In PvAI mode these methods are never called — AIController drives P2.   */
-
-  /**
-   * @method p2Up
-   * @description True while Player 2's "move up" key (ArrowUp) is held.
-   * @returns {boolean}
-   */
-  p2Up(): boolean
-  {
-    return this.isDown('ArrowUp');
-  }
-
-  /**
-   * @method p2Down
-   * @description True while Player 2's "move down" key (ArrowDown) is held.
-   * @returns {boolean}
-   */
-  p2Down(): boolean
-  {
-    return this.isDown('ArrowDown');
-  }
-
   /* ── System / menu keys ──────────────────────────────────────────────────
      Single-fire so Escape doesn't toggle pause 60 times per second.        */
 

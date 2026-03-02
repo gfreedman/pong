@@ -1,6 +1,6 @@
 /**
  * @file constants.ts
- * @description Single source of truth for every numeric and color tuning value in Neon Pong.
+ * @description Single source of truth for every numeric, color, and pure-mapping value in Neon Pong.
  *
  * WHY A CONSTANTS FILE?
  * ---------------------
@@ -173,33 +173,12 @@ export const PADDLE_MARGIN       = 30;
 export const PADDLE_ACCEL        = 26;
 
 /**
- * Velocity multiplier applied while the paddle is at (or near) max speed.
+ * Velocity multiplier applied each frame while the paddle is decelerating.
  * Values < 1 mean the paddle loses a fraction of its speed each frame — this
  * creates the "carry momentum" feeling where a fast-moving paddle takes longer
  * to slow down than a slow one.
  */
-export const PADDLE_DECEL_FAST   = 0.96;
-
-/**
- * Velocity multiplier applied while the paddle is nearly stopped.
- * A slightly lower value here (or the same) creates a gentle final drift to zero
- * rather than snapping abruptly from 1 px/s to 0.
- */
-export const PADDLE_DECEL_SLOW   = 0.96;
-
-/**
- * Power-curve exponent that blends between DECEL_FAST and DECEL_SLOW.
- * >1 means the paddle spends proportionally longer in the FAST zone (more carry).
- * The formula is:  t = (|vy| / maxSpeed)^CURVE,  then  decel = lerp(SLOW, FAST, t).
- */
-export const PADDLE_DECEL_CURVE  = 1.6;
-
-/**
- * Fraction of velocity that "bleeds" past the stop point before the paddle
- * reverses.  Simulates the tiny overshoot that makes movement feel physical
- * rather than robotically precise.
- */
-export const PADDLE_OVERSHOOT    = 0.10;
+export const PADDLE_DECEL        = 0.96;
 
 /* ═══════════════════════════════════════════════════════════════════════════
    PADDLE BREATHING
@@ -697,3 +676,31 @@ export const COLOR_POWERUP_STICKY  = '#ff00aa';
 
 /** Color of the TRAIL_BLAZER orb — cyan (matches P1 so it reads as a power move). */
 export const COLOR_POWERUP_TRAIL   = '#00f0ff';
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   POWER-UP COLOR LOOKUP
+   Pure mapping from PowerUpType → CSS color string.
+   Centralised here so Game and Renderer share one source of truth.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+import { PowerUpType } from './types.js';
+
+/**
+ * @function powerUpColor
+ * @description Maps a PowerUpType to its canonical CSS color string.
+ *              Both Game and Renderer import this instead of each defining
+ *              their own switch.
+ *
+ * @param type  The power-up variety.
+ * @returns {string} CSS color string matching the orb color constant.
+ */
+export function powerUpColor(type: PowerUpType): string
+{
+  switch (type)
+  {
+    case 'WIDE_PADDLE':   return COLOR_POWERUP_WIDE;
+    case 'SPEED_BOOTS':   return COLOR_POWERUP_SPEED;
+    case 'STICKY_PADDLE': return COLOR_POWERUP_STICKY;
+    case 'TRAIL_BLAZER':  return COLOR_POWERUP_TRAIL;
+  }
+}

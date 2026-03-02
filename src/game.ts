@@ -43,7 +43,7 @@ import
   CANVAS_WIDTH, CANVAS_HEIGHT,
   BALL_RADIUS, BALL_BASE_SPEED, BALL_MAX_SPEED,
   PADDLE_WIDTH, PADDLE_HEIGHT, PADDLE_BASE_SPEED, PADDLE_MARGIN,
-  PADDLE_ACCEL, PADDLE_DECEL_FAST, PADDLE_DECEL_SLOW, PADDLE_DECEL_CURVE,
+  PADDLE_ACCEL, PADDLE_DECEL,
   COLOR_P1, COLOR_P2,
   SHAKE_HIT_INTENSITY, SHAKE_HIT_MS,
   SHAKE_GOAL_INTENSITY, SHAKE_GOAL_MS,
@@ -59,7 +59,7 @@ import
   POWERUP_SPAWN_MIN_MS, POWERUP_SPAWN_MAX_MS, POWERUP_LIFETIME_MS,
   POWERUP_BOOST_MS, POWERUP_RADIUS, POWERUP_WIDE_FACTOR, POWERUP_SPEED_FACTOR,
   POWERUP_STICKY_HOLD_MS, POWERUP_SPEED_ACCEL_FACTOR, POWERUP_TRAIL_SPEED_BONUS,
-  COLOR_POWERUP_WIDE, COLOR_POWERUP_SPEED, COLOR_POWERUP_STICKY, COLOR_POWERUP_TRAIL,
+  powerUpColor,
   GOAT_PADDLE_HEIGHT, GOAT_SPIN_AMOUNT, GOAT_SPEED_MULT, GOAT_BALL_MAX_SPEED,
   WALL_FLASH_MS,
   SAFE_INSET_LEFT_PX, SAFE_INSET_RIGHT_PX,
@@ -194,6 +194,9 @@ export class Game
 
   /** requestAnimationFrame ID — used by stop() to cancel the loop. */
   private rafId = 0;
+
+  /** Bound RAF callback — created once so no allocation occurs per frame. */
+  private readonly boundLoop = this.loop.bind(this);
 
   /* ── Power-up state ──────────────────────────────────────────────────── */
 
@@ -384,7 +387,7 @@ export class Game
   start(): void
   {
     this.lastTimestamp = performance.now();
-    this.rafId = requestAnimationFrame(this.loop.bind(this));
+    this.rafId = requestAnimationFrame(this.boundLoop);
   }
 
   /**
@@ -423,7 +426,7 @@ export class Game
     /* Flush single-frame input events AFTER update and render. */
     this.input.flush();
 
-    this.rafId = requestAnimationFrame(this.loop.bind(this));
+    this.rafId = requestAnimationFrame(this.boundLoop);
   }
 
   /* ═══════════════════════════════════════════════════════════════════════
@@ -1153,13 +1156,9 @@ export class Game
     }
     else
     {
-      /* No input — apply the Mario-skid deceleration curve.
-         speedNorm: current speed as fraction of max (0–1).
-         t:         power-curve weight (spends more time near FAST end).
-         Blend: high speed → more FAST decel (longer carry).             */
-      const speedNorm = Math.abs(p1.vy) / p1MaxSpeed;
-      const t         = Math.pow(speedNorm, PADDLE_DECEL_CURVE);
-      p1.vy          *= PADDLE_DECEL_SLOW + (PADDLE_DECEL_FAST - PADDLE_DECEL_SLOW) * t;
+      /* No input — apply exponential deceleration so the paddle carries
+         momentum then settles naturally.                                 */
+      p1.vy *= PADDLE_DECEL;
 
       /* Snap to zero to prevent micro-oscillation. */
       if (Math.abs(p1.vy) < 1) p1.vy = 0;
@@ -1272,8 +1271,7 @@ export class Game
       spawnImpactRing(state.impactRings, state.ball.x, state.ball.y, color);
       triggerShake(state.shake, SHAKE_HIT_INTENSITY, SHAKE_HIT_MS);
 
-      const edgeFactor = (state.ball as Ball & { _edgeFactor?: number })._edgeFactor ?? 0;
-      this.audio.playPaddleHit(state.ball.speed, edgeFactor);
+      this.audio.playPaddleHit(state.ball.speed, result.edgeFactor);
 
       this.rallyHits++;
       state.rallyCount++;
@@ -1561,25 +1559,6 @@ export class Game
     return this.state.activeBoosts.some(
       b => b.owner === player && b.type === type && b.expiresAt > this.gameTime
     );
-  }
-
-  /**
-   * @method powerUpColor
-   * @description Maps a PowerUpType to its CSS color string.
-   *              Duplicated from Renderer so Game doesn't need to import from renderer.
-   *
-   * @param type  The power-up type.
-   * @returns {string} CSS color string.
-   */
-  private powerUpColor(type: PowerUpType): string
-  {
-    switch (type)
-    {
-      case 'WIDE_PADDLE':   return COLOR_POWERUP_WIDE;
-      case 'SPEED_BOOTS':   return COLOR_POWERUP_SPEED;
-      case 'STICKY_PADDLE': return COLOR_POWERUP_STICKY;
-      case 'TRAIL_BLAZER':  return COLOR_POWERUP_TRAIL;
-    }
   }
 
   /**

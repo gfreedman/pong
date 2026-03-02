@@ -60,7 +60,7 @@ import
   RALLY_TIER_BUILDING, RALLY_TIER_INTENSE, RALLY_TIER_DRAMATIC, RALLY_TIER_LEGENDARY,
   ZOOM_INTENSE, ZOOM_DRAMATIC, ZOOM_LEGENDARY,
   POWERUP_RADIUS, POWERUP_LIFETIME_MS, POWERUP_BOOST_MS, POWERUP_STICKY_HOLD_MS,
-  COLOR_POWERUP_WIDE, COLOR_POWERUP_SPEED, COLOR_POWERUP_STICKY, COLOR_POWERUP_TRAIL,
+  powerUpColor,
   PADDLE_BASE_SPEED,
   BALL_BASE_SPEED, BALL_MAX_SPEED,
   CHROMATIC_MS,
@@ -1380,22 +1380,6 @@ export class Renderer
      POWER-UP ORBS
      ═══════════════════════════════════════════════════════════════════════ */
 
-  /**
-   * @method powerUpColor
-   * @description Maps a PowerUpType to its CSS color string.
-   * @param type  The power-up type.
-   * @returns {string} CSS color string.
-   */
-  private powerUpColor(type: PowerUpType): string
-  {
-    switch (type)
-    {
-      case 'WIDE_PADDLE':   return COLOR_POWERUP_WIDE;
-      case 'SPEED_BOOTS':   return COLOR_POWERUP_SPEED;
-      case 'STICKY_PADDLE': return COLOR_POWERUP_STICKY;
-      case 'TRAIL_BLAZER':  return COLOR_POWERUP_TRAIL;
-    }
-  }
 
   /**
    * @method powerUpLabel
@@ -1530,7 +1514,7 @@ export class Renderer
     const { ctx } = this;
     for (const pu of powerUps)
     {
-      const color = this.powerUpColor(pu.type);
+      const color = powerUpColor(pu.type);
 
       /* Fade in over first 400ms — no popping into existence. */
       const fadeIn = Math.min(1, pu.age / 400);
@@ -1644,7 +1628,7 @@ export class Renderer
 
       playerBoosts.forEach((boost, i) =>
       {
-        const color     = this.powerUpColor(boost.type);
+        const color     = powerUpColor(boost.type);
         const remaining = Math.min(1, Math.max(0, (boost.expiresAt - gameTime) / POWERUP_BOOST_MS));
         const x         = startX + i * (iconSide + iconGap);
         const cy        = topY + iconSide / 2;

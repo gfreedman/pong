@@ -168,38 +168,6 @@ export class AudioManager
     oscillator.stop(ctx.currentTime + duration + 0.01); // tiny buffer avoids clip
   }
 
-  /**
-   * @method noise
-   * @description Spawn a short burst of white noise (static / crash sound).
-   *              Useful for shield breaks, explosions, etc.
-   *
-   * @param gainVal   Initial gain (0–1)
-   * @param duration  Duration in seconds
-   */
-  private noise(gainVal: number, duration: number): void
-  {
-    if (this.muted) return;
-    const ctx    = this.getCtx();
-
-    /* Fill a buffer with random values in [-1, 1] (white noise). */
-    const bufLen = Math.ceil(ctx.sampleRate * duration);
-    const buf    = ctx.createBuffer(1, bufLen, ctx.sampleRate);
-    const data   = buf.getChannelData(0);
-    for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
-
-    const src  = ctx.createBufferSource();
-    src.buffer = buf;
-
-    /* Same gain pattern as osc(): .value not setValueAtTime. */
-    const gain       = ctx.createGain();
-    gain.gain.value  = gainVal;
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
-
-    src.connect(gain);
-    gain.connect(this.masterGain);
-    src.start();
-  }
-
   /* ── Public volume control ────────────────────────────────────────────── */
 
   /**

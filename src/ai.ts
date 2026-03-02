@@ -55,7 +55,7 @@ import
 {
   CANVAS_HEIGHT,
   PADDLE_BASE_SPEED,
-  PADDLE_ACCEL, PADDLE_DECEL_FAST, PADDLE_DECEL_SLOW, PADDLE_DECEL_CURVE,
+  PADDLE_ACCEL, PADDLE_DECEL,
   AI_SPEED_FACTOR, AI_REACTION_DELAY_MIN, AI_REACTION_DELAY_MAX, AI_TARGET_OFFSET_MAX,
   AI_EASY_SPEED_FACTOR, AI_EASY_REACTION_DELAY_MIN, AI_EASY_REACTION_DELAY_MAX, AI_EASY_TARGET_OFFSET_MAX,
   AI_HARD_SPEED_FACTOR, AI_HARD_REACTION_DELAY_MIN, AI_HARD_REACTION_DELAY_MAX, AI_HARD_TARGET_OFFSET_MAX,
@@ -365,10 +365,8 @@ export class AIController
     }
     else
     {
-      /* Decelerate using the same power-curve as the player paddle. */
-      const speedNorm = Math.abs(paddle.vy) / maxSpeed;
-      const t         = Math.pow(speedNorm, PADDLE_DECEL_CURVE);
-      paddle.vy      *= PADDLE_DECEL_SLOW + (PADDLE_DECEL_FAST - PADDLE_DECEL_SLOW) * t;
+      /* Decelerate — exponential decay matching the player paddle. */
+      paddle.vy *= PADDLE_DECEL;
 
       if (Math.abs(paddle.vy) < 1) paddle.vy = 0;
     }
