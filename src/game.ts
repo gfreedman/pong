@@ -1349,7 +1349,7 @@ export class Game
         });
 
         /* Visual feedback — two overlapping rings for extra emphasis. */
-        const puColor = this.powerUpColor(pu.type);
+        const puColor = powerUpColor(pu.type);
         spawnImpactRing(state.impactRings, pu.x, pu.y, puColor);
         spawnImpactRing(state.impactRings, pu.x, pu.y, puColor);
 
