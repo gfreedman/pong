@@ -4,13 +4,14 @@
   "description": "Canvas-based Pong with neon aesthetics, spin physics, and juice",
   "type": "module",
   "scripts": {
-    "build": "esbuild src/main.ts --bundle --outfile=dist/script.js --target=es2020",
+    "build": "tsc --noEmit && esbuild src/main.ts --bundle --outfile=dist/script.js --target=es2020",
     "dev": "esbuild src/main.ts --bundle --outfile=dist/script.js --target=es2020 --watch",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "devDependencies": {
     "esbuild": "^0.20.0",
+    "typescript": "^5.9.3",
     "vitest": "^2.0.0"
   }
 }
