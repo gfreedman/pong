@@ -1506,12 +1506,14 @@ export class Game
     state.lastHitPlayer = 1;
 
     /* ── Reset private match-tracking fields ── */
-    this.rallyHits     = 0;
-    this.currentDroneTier = 0;
-    this.servingToward = true;
-    this.gameTime      = 0;
-    this.powerUpTimer  = 0;
-    this.powerUpIdCtr  = 0;
+    this.rallyHits          = 0;
+    this.currentDroneTier   = 0;
+    this.servingToward      = true;
+    this.gameTime           = 0;
+    this.powerUpTimer       = 0;
+    this.powerUpIdCtr       = 0;
+    this.spinDiscoveryShown = false;
+    this.spinDiscoveryTimer = 0;
 
     /* Randomize the first orb spawn window. */
     this.powerUpInterval = POWERUP_SPAWN_MIN_MS +

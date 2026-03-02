@@ -634,9 +634,6 @@ export const POWERUP_WIDE_FACTOR    = 1.5;
 /** SPEED_BOOTS multiplier: paddle max speed increases by this factor. */
 export const POWERUP_SPEED_FACTOR   = 1.4;
 
-/** TRAIL_BLAZER multiplier: trail length and brightness scale by this factor. */
-export const POWERUP_TRAIL_FACTOR   = 3.0;
-
 /** STICKY_PADDLE: ball is held on the paddle for this many milliseconds before auto-releasing. */
 export const POWERUP_STICKY_HOLD_MS  = 500;
 

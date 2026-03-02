@@ -14,10 +14,12 @@
  *
  * COORDINATE SYSTEM
  * -----------------
- * The canvas drawing buffer is always 960 × 540 logical pixels.
- * On high-DPI (Retina) displays, the constructor multiplies that by the
- * devicePixelRatio so every physical pixel gets its own sample — no blur.
- * All drawing code uses the original 960 × 540 logical coordinates.
+ * The canvas height is fixed at 540 logical pixels; width is set at startup
+ * by setCanvasWidth() to match the viewport's aspect ratio (e.g. 960 on a
+ * standard 16:9 display, wider on ultrawide).  On high-DPI (Retina) displays,
+ * the constructor multiplies both dimensions by devicePixelRatio so every
+ * physical pixel gets its own sample — no blur.
+ * All drawing code uses CANVAS_WIDTH × CANVAS_HEIGHT logical coordinates.
  *
  * LAYER ORDER (bottom to top each frame)
  * ----------------------------------------
@@ -780,10 +782,10 @@ export class Renderer
    *              which accumulates proportional to spin magnitude so they slow
    *              naturally as spin decays.
    *
-   * @param ball   The ball.
-   * @param angle  Travel direction angle (radians) — used for context rotation.
+   * @param ball    The ball.
+   * @param _angle  Travel direction angle (radians) — unused; kept for call-site symmetry.
    */
-  private drawSpinLines(ball: Ball, angle: number): void
+  private drawSpinLines(ball: Ball, _angle: number): void
   {
     const { ctx } = this;
 
@@ -1106,7 +1108,7 @@ export class Renderer
     {
       /* Spread lines evenly across the fan.
          Use spinAngle for deterministic per-line variation (no random flicker). */
-      const lineAngle = backAngle + (i / (numLines - 1) - 0.5) * spread;
+      const lineAngle = backAngle + (i / (numLines > 1 ? numLines - 1 : 1) - 0.5) * spread;
       const length    = 18 + t * 28 + Math.sin(ball.spinAngle + i * 1.3) * 6;
 
       ctx.beginPath();
@@ -1322,8 +1324,8 @@ export class Renderer
    * @description Draws the serve countdown number (3, 2, 1) centered on screen.
    *              Called externally by Game during the SERVING phase.
    *
-   * @param text  The countdown text to display (e.g. "3", "2", "1").
-   * @param ball  The ball (position is read but not used — kept for signature compatibility).
+   * @param text   The countdown text to display (e.g. "3", "2", "1").
+   * @param _ball  Unused — kept for call-site symmetry with other draw methods.
    */
   drawCountdown(text: string, _ball: Ball): void
   {
@@ -1365,7 +1367,13 @@ export class Renderer
   drawSpinDiscovery(x: number, y: number, alpha: number): void
   {
     const { ctx } = this;
+
+    /* drawSpinDiscovery is called from game.ts AFTER draw() returns, so the
+       game transform has been restored.  Re-apply it so game coordinates
+       (x, y) map to the correct screen position.                          */
     ctx.save();
+    ctx.translate(this.gameOffX, this.gameOffY);
+    ctx.scale(this.gameScale, this.gameScale);
     ctx.globalAlpha = alpha;
     ctx.font        = 'bold 17px "Courier New", monospace';
     ctx.fillStyle   = COLOR_SPARK;
@@ -1845,11 +1853,10 @@ export class Renderer
    *              the paddle that is currently holding the ball.
    *              The rings continuously cycle (modulo 2π) to create a "ripple" effect.
    *
-   * @param paddle        The paddle holding the ball.
-   * @param stickyHoldMs  Remaining hold time (ms) — not currently used for scaling
-   *                      but passed for potential future use.
+   * @param paddle          The paddle holding the ball.
+   * @param _stickyHoldMs   Remaining hold time (ms) — unused; kept for potential future scaling.
    */
-  private drawStickyPaddleEffect(paddle: Paddle, stickyHoldMs: number): void
+  private drawStickyPaddleEffect(paddle: Paddle, _stickyHoldMs: number): void
   {
     const { ctx } = this;
 

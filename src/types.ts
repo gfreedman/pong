@@ -47,12 +47,6 @@ export type GamePhase =
  */
 export type Difficulty = 'EASY' | 'MEDIUM' | 'HARD';
 
-/**
- * @typedef PlayerSide
- * @description Which side of the court the human player controls.
- */
-export type PlayerSide = 'LEFT' | 'RIGHT';
-
 /* ═══════════════════════════════════════════════════════════════════════════
    POWER-UPS
    Collectible orbs that float onto the court mid-match and grant the
