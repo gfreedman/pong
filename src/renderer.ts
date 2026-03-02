@@ -232,6 +232,27 @@ export class Renderer
   }
 
   /* ═══════════════════════════════════════════════════════════════════════
+     UTILITY HELPERS
+     ═══════════════════════════════════════════════════════════════════════ */
+
+  /**
+   * @method rrect
+   * @description Draws a rounded rectangle path using arcTo — universally
+   *              supported across all browsers, unlike ctx.roundRect (Chrome 99+).
+   *              Call ctx.beginPath() before and ctx.fill()/stroke() after.
+   */
+  private rrect(x: number, y: number, w: number, h: number, r: number): void
+  {
+    const { ctx } = this;
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y,     x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x,     y + h, r);
+    ctx.arcTo(x,     y + h, x,     y,     r);
+    ctx.arcTo(x,     y,     x + w, y,     r);
+    ctx.closePath();
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════
      TOP-LEVEL DRAW
      Called once per frame. Orchestrates all layer drawing.
      ═══════════════════════════════════════════════════════════════════════ */
@@ -1647,7 +1668,7 @@ export class Renderer
         ctx.globalAlpha = 0.82;
         ctx.fillStyle   = 'rgba(0,0,0,0.60)';
         ctx.beginPath();
-        ctx.roundRect(x, topY, iconSide, iconSide, 4);
+        this.rrect(x, topY, iconSide, iconSide, 4);
         ctx.fill();
 
         /* Coloured tint — brighter when more time remains. */
@@ -1656,7 +1677,7 @@ export class Renderer
         ctx.shadowBlur  = 5;
         ctx.globalAlpha = 0.18 + remaining * 0.28;
         ctx.beginPath();
-        ctx.roundRect(x, topY, iconSide, iconSide, 4);
+        this.rrect(x, topY, iconSide, iconSide, 4);
         ctx.fill();
 
         /* Mini icon centered in the pill. */
