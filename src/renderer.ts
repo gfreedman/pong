@@ -1257,6 +1257,16 @@ export class Renderer
     drawScore(state.score1, state.score1Pop, p1x, 64, COLOR_P1);
     drawScore(state.score2, state.score2Pop, p2x, 64, COLOR_P2);
 
+    /* ── Player / AI identity emoji — drawn left of each score ─────────
+       No shadowBlur: emojis render poorly with canvas shadow filters.  */
+    ctx.save();
+    ctx.font      = '24px \'Apple Color Emoji\', \'Segoe UI Emoji\', sans-serif';
+    ctx.textAlign = 'center';
+    ctx.shadowBlur = 0;
+    ctx.fillText('😊', p1x - 46, 48);   // human player — left of P1 score
+    ctx.fillText('🤖', p2x - 46, 48);   // AI — left of P2 score
+    ctx.restore();
+
     /* ── Match-progress pips ── */
     this.drawMatchPips(p1x, state.score1, COLOR_P1);
     this.drawMatchPips(p2x, state.score2, COLOR_P2);

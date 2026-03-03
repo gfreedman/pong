@@ -74,20 +74,20 @@ describe('AIController.configure — speedFactor', () =>
     expect((ai as any).config.speedFactor).toBeLessThan(0.6);
   });
 
-  it('MEDIUM speedFactor is ≈ 0.85', () =>
+  it('MEDIUM speedFactor matches AI_SPEED_FACTOR constant', () =>
   {
     const ai = new AIController();
     ai.configure('MEDIUM');
     expect((ai as any).config.speedFactor).toBe(AI_SPEED_FACTOR);
-    expect((ai as any).config.speedFactor).toBeCloseTo(0.85, 2);
+    expect((ai as any).config.speedFactor).toBeCloseTo(0.75, 2);
   });
 
-  it('HARD speedFactor is > 0.95', () =>
+  it('HARD speedFactor is > 0.85', () =>
   {
     const ai = new AIController();
     ai.configure('HARD');
     expect((ai as any).config.speedFactor).toBe(AI_HARD_SPEED_FACTOR);
-    expect((ai as any).config.speedFactor).toBeGreaterThan(0.95);
+    expect((ai as any).config.speedFactor).toBeGreaterThan(0.85);
   });
 });
 

@@ -494,16 +494,16 @@ export const LEGENDARY_SHAKE_MS        = 600;
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /** Fraction of PADDLE_BASE_SPEED the Medium AI can reach (0–1). */
-export const AI_SPEED_FACTOR       = 0.85;
+export const AI_SPEED_FACTOR       = 0.75;
 
 /** Minimum ms between Medium AI target recalculations (simulates reaction time). */
-export const AI_REACTION_DELAY_MIN = 120;
+export const AI_REACTION_DELAY_MIN = 150;
 
 /** Maximum ms between Medium AI target recalculations. */
-export const AI_REACTION_DELAY_MAX = 180;
+export const AI_REACTION_DELAY_MAX = 250;
 
 /** Maximum ±px random error added to the Medium AI's predicted ball position. */
-export const AI_TARGET_OFFSET_MAX  = 40;
+export const AI_TARGET_OFFSET_MAX  = 65;
 
 /* ─── AI Tuning — Easy ───────────────────────────────────────────────────── */
 
@@ -522,16 +522,16 @@ export const AI_EASY_TARGET_OFFSET_MAX  = 90;
 /* ─── AI Tuning — Hard ───────────────────────────────────────────────────── */
 
 /** Fraction of PADDLE_BASE_SPEED the Hard AI can reach. */
-export const AI_HARD_SPEED_FACTOR       = 0.97;
+export const AI_HARD_SPEED_FACTOR       = 0.87;
 
 /** Min ms between Hard AI recalculations (near-instant reactions). */
-export const AI_HARD_REACTION_DELAY_MIN = 55;
+export const AI_HARD_REACTION_DELAY_MIN = 80;
 
 /** Max ms between Hard AI recalculations. */
-export const AI_HARD_REACTION_DELAY_MAX = 95;
+export const AI_HARD_REACTION_DELAY_MAX = 140;
 
-/** Max ±px random error for Hard AI — very small, nearly precise. */
-export const AI_HARD_TARGET_OFFSET_MAX  = 6;
+/** Max ±px random error for Hard AI — small but not robotic. */
+export const AI_HARD_TARGET_OFFSET_MAX  = 18;
 
 /* ─── AI Form System — Streak / hot-cold dynamics ───────────────────────────
    The Skill Curve Model gives the AI a "form" value in [-1, +1].
@@ -579,10 +579,10 @@ export const AI_EASY_FALSE_READ_CHANCE   = 0.30;
 /* ─── MEDIUM tier form tuning ───────────────────────────────────────────── */
 
 /** How much form shifts MEDIUM AI behavior.  Moderate streakiness. */
-export const AI_FORM_INFLUENCE           = 0.28;
+export const AI_FORM_INFLUENCE           = 0.38;
 
 /** Base probability of a false-read for MEDIUM AI when maximally cold. */
-export const AI_FALSE_READ_CHANCE        = 0.12;
+export const AI_FALSE_READ_CHANCE        = 0.20;
 
 /* ─── HARD tier form tuning ─────────────────────────────────────────────── */
 
@@ -590,10 +590,10 @@ export const AI_FALSE_READ_CHANCE        = 0.12;
  * How much form shifts HARD AI behavior.  Small = stays dangerous even when cold.
  * A skilled player can bait hard into rare false reads with heavy spin.
  */
-export const AI_HARD_FORM_INFLUENCE      = 0.13;
+export const AI_HARD_FORM_INFLUENCE      = 0.22;
 
 /** Base probability of a false-read for HARD AI when maximally cold. */
-export const AI_HARD_FALSE_READ_CHANCE   = 0.04;
+export const AI_HARD_FALSE_READ_CHANCE   = 0.12;
 
 /* ═══════════════════════════════════════════════════════════════════════════
    POWER-UP COLLECTIBLES
@@ -614,34 +614,34 @@ export const POWERUP_SPAWN_MIN_Y    = 80;
 export const POWERUP_SPAWN_MAX_Y    = 460;
 
 /** Minimum wait after the last orb before a new one can spawn (ms). */
-export const POWERUP_SPAWN_MIN_MS   = 8000;
+export const POWERUP_SPAWN_MIN_MS   = 6000;
 
 /** Maximum wait after the last orb before a new one spawns (ms). */
-export const POWERUP_SPAWN_MAX_MS   = 18000;
+export const POWERUP_SPAWN_MAX_MS   = 13000;
 
 /** How long an uncollected orb stays on the court before it fades out (ms). */
 export const POWERUP_LIFETIME_MS    = 8000;
 
 /** How long a collected boost stays active for the player (ms). */
-export const POWERUP_BOOST_MS       = 8000;
+export const POWERUP_BOOST_MS       = 12000;
 
 /** Collision detection radius for orb collection (px). */
 export const POWERUP_RADIUS         = 20;
 
 /** WIDE_PADDLE multiplier: paddle height grows by this factor. */
-export const POWERUP_WIDE_FACTOR    = 1.5;
+export const POWERUP_WIDE_FACTOR    = 1.85;
 
 /** SPEED_BOOTS multiplier: paddle max speed increases by this factor. */
-export const POWERUP_SPEED_FACTOR   = 1.4;
+export const POWERUP_SPEED_FACTOR   = 1.65;
 
 /** STICKY_PADDLE: ball is held on the paddle for this many milliseconds before auto-releasing. */
-export const POWERUP_STICKY_HOLD_MS  = 500;
+export const POWERUP_STICKY_HOLD_MS  = 800;
 
 /** SPEED_BOOTS: extra acceleration multiplier applied while the boost is active. */
-export const POWERUP_SPEED_ACCEL_FACTOR = 1.5;
+export const POWERUP_SPEED_ACCEL_FACTOR = 1.8;
 
 /** TRAIL_BLAZER: bonus speed (px/s) added to the ball on each hit while active. */
-export const POWERUP_TRAIL_SPEED_BONUS  = 25;
+export const POWERUP_TRAIL_SPEED_BONUS  = 55;
 
 /* ═══════════════════════════════════════════════════════════════════════════
    GOAT MODE  (secret cheat)

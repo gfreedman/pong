@@ -64,12 +64,12 @@ describe('AIController.configure', () =>
     expect((ai as any).config.speedFactor).toBeCloseTo(AI_SPEED_FACTOR, 5);
   });
 
-  /** HARD speedFactor is near the maximum (> 0.95). */
-  test('configure(HARD) sets speedFactor > 0.95', () =>
+  /** HARD speedFactor is well above Medium (> 0.85). */
+  test('configure(HARD) sets speedFactor > 0.85', () =>
   {
     const ai = new AIController();
     ai.configure('HARD');
-    expect((ai as any).config.speedFactor).toBeGreaterThan(0.95);
+    expect((ai as any).config.speedFactor).toBeGreaterThan(0.85);
     expect((ai as any).config.speedFactor).toBe(AI_HARD_SPEED_FACTOR);
   });
 
@@ -287,13 +287,13 @@ describe('AIController.update — MEDIUM', () =>
 
 describe('AIController.update — HARD', () =>
 {
-  /** HARD max speed is > 95 % of PADDLE_BASE_SPEED. */
-  test('HARD AI max paddle speed is > 95% of PADDLE_BASE_SPEED', () =>
+  /** HARD max speed is > 85 % of PADDLE_BASE_SPEED (faster than Medium at 75%). */
+  test('HARD AI max paddle speed is > 85% of PADDLE_BASE_SPEED', () =>
   {
     const ai      = new AIController();
     ai.configure('HARD');
     const maxSpeed = PADDLE_BASE_SPEED * (ai as any).config.speedFactor;
-    expect(maxSpeed).toBeGreaterThan(PADDLE_BASE_SPEED * 0.95);
+    expect(maxSpeed).toBeGreaterThan(PADDLE_BASE_SPEED * 0.85);
   });
 
   /** HARD reaction delays are short — [55, 95] ms. */
