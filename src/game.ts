@@ -843,12 +843,31 @@ export class Game
     /* Re-fit the canvas pixel buffer to the new viewport size. */
     this.renderer.handleResize(this.canvas);
 
+    /* Re-position paddles to respect updated safe-area insets. */
+    this.refreshPaddleInsets();
+
     /* Pause only if gameplay is live — not if already paused, on a menu, etc. */
     const pauseable: GamePhase[] = ['PLAYING', 'SERVE_PENDING', 'SERVING', 'POINT_SCORED'];
     if (pauseable.includes(this.state.phase))
     {
       this.pauseGame();
     }
+  }
+
+  /**
+   * @method refreshPaddleInsets
+   * @description Repositions both paddles to honour the current safe-area insets.
+   *              Call this whenever SAFE_INSET_LEFT_PX / SAFE_INSET_RIGHT_PX may
+   *              have changed (after setSafeInsets() is called or on orientation change).
+   */
+  refreshPaddleInsets(): void
+  {
+    const p1x = PADDLE_MARGIN + SAFE_INSET_LEFT_PX;
+    const p2x = CANVAS_WIDTH - PADDLE_MARGIN - PADDLE_WIDTH - SAFE_INSET_RIGHT_PX;
+    this.state.player1.x     = p1x;
+    this.state.player1.baseX = p1x;
+    this.state.player2.x     = p2x;
+    this.state.player2.baseX = p2x;
   }
 
   /**

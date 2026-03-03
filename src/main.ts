@@ -38,7 +38,9 @@ function main(): void
   setCanvasWidth(window.innerWidth, window.innerHeight);
 
   /* Read safe-area insets from the CSS custom properties set in style.css.
-     env() values are only accessible via computed style, not directly in JS. */
+     env() values are only accessible via computed style, not directly in JS.
+     On iOS, env() can resolve to 0 synchronously at DOMContentLoaded and only
+     update after the first paint — so we read again in a rAF to catch late values. */
   const cs  = getComputedStyle(document.documentElement);
   const sal = parseFloat(cs.getPropertyValue('--sal')) || 0;
   const sar = parseFloat(cs.getPropertyValue('--sar')) || 0;
@@ -48,6 +50,19 @@ function main(): void
      Game owns the entire state machine, game loop, and all subsystems.  */
   const game = new Game(canvas);
   game.start();
+
+  /* ── iOS env() late-resolve: re-read insets after first paint ────────
+     iOS Safari may return 0 for env(safe-area-inset-*) at parse time but
+     provide real values once the layout engine has committed the first frame.
+     A single rAF is enough to observe the final values.                 */
+  requestAnimationFrame(() =>
+  {
+    const cs2  = getComputedStyle(document.documentElement);
+    const sal2 = parseFloat(cs2.getPropertyValue('--sal')) || 0;
+    const sar2 = parseFloat(cs2.getPropertyValue('--sar')) || 0;
+    setSafeInsets(sal2, sar2);
+    game.refreshPaddleInsets();
+  });
 
   /* ── Mobile: orientation lock + graceful orientation handling ─────────
      Request landscape lock so the OS rotates the game automatically.
@@ -73,6 +88,12 @@ function main(): void
         if (window.innerWidth > window.innerHeight)
         {
           setCanvasWidth(window.innerWidth, window.innerHeight);
+
+          /* Re-read safe-area insets — they can change on orientation flip. */
+          const csO  = getComputedStyle(document.documentElement);
+          const salO = parseFloat(csO.getPropertyValue('--sal')) || 0;
+          const sarO = parseFloat(csO.getPropertyValue('--sar')) || 0;
+          setSafeInsets(salO, sarO);
         }
         game.handleOrientationChange();
       }, 300);

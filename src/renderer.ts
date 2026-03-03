@@ -1654,7 +1654,7 @@ export class Renderer
     const drawRow = (playerBoosts: ActiveBoost[], rightAlign: boolean) =>
     {
       const totalW = playerBoosts.length * iconSide + Math.max(0, playerBoosts.length - 1) * iconGap;
-      const startX = rightAlign ? CANVAS_WIDTH - 8 - totalW : 8;
+      const startX = rightAlign ? CANVAS_WIDTH - Math.ceil(72 / this.gameScale) - totalW : 8;
 
       playerBoosts.forEach((boost, i) =>
       {
